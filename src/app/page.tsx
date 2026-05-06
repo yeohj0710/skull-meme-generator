@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, DragEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, DragEvent, useCallback, useEffect, useRef, useState } from "react";
 import { Download, ImagePlus, RefreshCw, Skull, UploadCloud } from "lucide-react";
 
 type RenderStatus = "idle" | "rendering" | "ready" | "error";
@@ -11,7 +11,9 @@ type EffectSettings = {
   skull: number;
 };
 
-const MAX_OUTPUT_SIDE = 1920;
+const OUTPUT_WIDTH = 1080;
+const OUTPUT_HEIGHT = 1620;
+const OUTPUT_ASPECT = OUTPUT_WIDTH / OUTPUT_HEIGHT;
 const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/avif"];
 const SKULL_SRC = "/emoji-skull.webp";
 
@@ -42,23 +44,36 @@ function loadImage(src: string) {
   });
 }
 
-function getOutputSize(image: ImageBitmap) {
-  const scale = Math.min(1, MAX_OUTPUT_SIDE / Math.max(image.width, image.height));
-  return {
-    width: Math.round(image.width * scale),
-    height: Math.round(image.height * scale),
-  };
+function getCoverCrop(image: ImageBitmap, width: number, height: number) {
+  const sourceRatio = image.width / image.height;
+  const targetRatio = width / height;
+  let sx = 0;
+  let sy = 0;
+  let sw = image.width;
+  let sh = image.height;
+
+  if (sourceRatio > targetRatio) {
+    sw = image.height * targetRatio;
+    sx = (image.width - sw) * 0.5;
+  } else {
+    sh = image.width / targetRatio;
+    sy = (image.height - sh) * 0.44;
+  }
+
+  return { sx, sy, sw, sh };
 }
 
 function drawBasePhoto(ctx: CanvasRenderingContext2D, image: ImageBitmap, width: number, height: number, mono: number) {
+  const crop = getCoverCrop(image, width, height);
+
   ctx.save();
   ctx.filter = [
-    `grayscale(${mono * 0.86})`,
-    `contrast(${0.94 + mono * 0.1})`,
-    `saturate(${0.92 - mono * 0.5})`,
-    `brightness(${0.86 - mono * 0.12})`,
+    `grayscale(${mono * 0.8})`,
+    `contrast(${1.0 + mono * 0.18})`,
+    `saturate(${0.96 - mono * 0.44})`,
+    `brightness(${0.82 - mono * 0.1})`,
   ].join(" ");
-  ctx.drawImage(image, 0, 0, width, height);
+  ctx.drawImage(image, crop.sx, crop.sy, crop.sw, crop.sh, 0, 0, width, height);
   ctx.restore();
 }
 
@@ -75,19 +90,20 @@ function drawVignette(ctx: CanvasRenderingContext2D, width: number, height: numb
 }
 
 function drawNoise(ctx: CanvasRenderingContext2D, width: number, height: number, noise: number) {
-  const specks = Math.floor(width * height * (0.003 + noise * 0.017));
+  const specks = Math.floor(width * height * (0.002 + noise * 0.011));
 
   for (let i = 0; i < specks; i += 1) {
     const value = Math.random() > 0.52 ? 255 : 0;
-    const alpha = Math.random() * 0.055 + noise * 0.03;
+    const alpha = Math.random() * 0.045 + noise * 0.025;
     ctx.fillStyle = `rgba(${value},${value},${value},${alpha})`;
-    ctx.fillRect(Math.random() * width, Math.random() * height, 1, 1);
+    const size = Math.random() > 0.92 ? 2 : 1;
+    ctx.fillRect(Math.random() * width, Math.random() * height, size, size);
   }
 }
 
 function drawScanlines(ctx: CanvasRenderingContext2D, width: number, height: number, noise: number) {
   ctx.save();
-  ctx.globalAlpha = 0.045 + noise * 0.055;
+  ctx.globalAlpha = 0.055 + noise * 0.07;
   ctx.fillStyle = "#050505";
   for (let y = 0; y < height; y += 4) {
     ctx.fillRect(0, y, width, 1);
@@ -95,10 +111,52 @@ function drawScanlines(ctx: CanvasRenderingContext2D, width: number, height: num
   ctx.restore();
 }
 
-function drawShakeSlices(ctx: CanvasRenderingContext2D, width: number, height: number, noise: number) {
-  const slices = Math.floor(2 + noise * 7);
+function drawLightBloom(ctx: CanvasRenderingContext2D, width: number, height: number, noise: number) {
   ctx.save();
-  ctx.globalAlpha = 0.04 + noise * 0.08;
+  ctx.globalCompositeOperation = "screen";
+  const bottom = ctx.createRadialGradient(width * 0.52, height * 0.86, 0, width * 0.52, height * 0.86, width * 0.62);
+  bottom.addColorStop(0, `rgba(255,255,255,${0.12 + noise * 0.14})`);
+  bottom.addColorStop(0.28, `rgba(175,190,190,${0.08 + noise * 0.08})`);
+  bottom.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = bottom;
+  ctx.fillRect(0, 0, width, height);
+
+  const side = ctx.createLinearGradient(0, 0, width, height);
+  side.addColorStop(0, `rgba(255,255,255,${0.02 + noise * 0.05})`);
+  side.addColorStop(0.46, "rgba(255,255,255,0)");
+  side.addColorStop(1, `rgba(255,255,255,${0.03 + noise * 0.04})`);
+  ctx.fillStyle = side;
+  ctx.fillRect(0, 0, width, height);
+  ctx.restore();
+}
+
+function drawFilmScratches(ctx: CanvasRenderingContext2D, width: number, height: number, noise: number) {
+  const scratches = Math.floor(8 + noise * 34);
+  ctx.save();
+  ctx.globalCompositeOperation = "screen";
+  ctx.lineCap = "round";
+
+  for (let i = 0; i < scratches; i += 1) {
+    const x = Math.random() * width;
+    const y = Math.random() * height;
+    const length = height * (0.025 + Math.random() * 0.12);
+    const lean = (Math.random() - 0.5) * width * 0.035;
+    ctx.globalAlpha = 0.04 + Math.random() * (0.08 + noise * 0.12);
+    ctx.lineWidth = Math.random() > 0.82 ? 2 : 1;
+    ctx.strokeStyle = Math.random() > 0.72 ? "#ffffff" : "#bfc7c7";
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + lean, y + length);
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
+function drawShakeSlices(ctx: CanvasRenderingContext2D, width: number, height: number, noise: number) {
+  const slices = Math.floor(3 + noise * 9);
+  ctx.save();
+  ctx.globalAlpha = 0.05 + noise * 0.09;
   for (let i = 0; i < slices; i += 1) {
     const sliceHeight = 3 + Math.random() * (height * 0.014);
     const y = Math.random() * height;
@@ -109,9 +167,9 @@ function drawShakeSlices(ctx: CanvasRenderingContext2D, width: number, height: n
 }
 
 function drawSkullAsset(ctx: CanvasRenderingContext2D, skullImage: HTMLImageElement, width: number, height: number, skull: number) {
-  const size = clamp(Math.min(width, height) * (0.07 + skull * 0.08), 42, 170);
-  const x = width / 2 - size / 2 + (Math.random() - 0.5) * size * 0.06;
-  const y = height * 0.815 - size / 2 + (Math.random() - 0.5) * size * 0.06;
+  const size = clamp(width * (0.1 + skull * 0.2), 72, width * 0.34);
+  const x = width / 2 - size / 2 + (Math.random() - 0.5) * size * 0.05;
+  const y = height * 0.78 - size / 2 + (Math.random() - 0.5) * size * 0.05;
 
   ctx.save();
   ctx.globalAlpha = 1;
@@ -131,7 +189,8 @@ async function renderSkullMeme(file: File, canvas: HTMLCanvasElement, skullImage
     throw new Error("Canvas is not available.");
   }
 
-  const { width, height } = getOutputSize(bitmap);
+  const width = OUTPUT_WIDTH;
+  const height = OUTPUT_HEIGHT;
   const mono = clamp(settings.mono / 100, 0, 1);
   const noise = clamp(settings.noise / 100, 0, 1);
   const skull = clamp(settings.skull / 100, 0.35, 1);
@@ -146,7 +205,9 @@ async function renderSkullMeme(file: File, canvas: HTMLCanvasElement, skullImage
   drawBasePhoto(ctx, bitmap, width, height, mono);
   drawShakeSlices(ctx, width, height, noise);
   drawVignette(ctx, width, height, atmosphere);
+  drawLightBloom(ctx, width, height, noise);
   drawScanlines(ctx, width, height, noise);
+  drawFilmScratches(ctx, width, height, noise);
   drawNoise(ctx, width, height, noise);
   drawSkullAsset(ctx, skullImage, width, height, skull);
 
@@ -181,16 +242,16 @@ export default function Home() {
   const inputRef = useRef<HTMLInputElement>(null);
   const latestFileRef = useRef<File | null>(null);
   const skullImageRef = useRef<HTMLImageElement | null>(null);
+  const settingsRef = useRef<EffectSettings>({ mono: 48, noise: 62, skull: 42 });
+  const renderIdRef = useRef(0);
   const [status, setStatus] = useState<RenderStatus>("idle");
   const [file, setFile] = useState<File | null>(null);
-  const [mono, setMono] = useState(58);
-  const [noise, setNoise] = useState(42);
-  const [skull, setSkull] = useState(54);
+  const [mono, setMono] = useState(48);
+  const [noise, setNoise] = useState(62);
+  const [skull, setSkull] = useState(42);
   const [previewUrl, setPreviewUrl] = useState("");
-  const [previewAspect, setPreviewAspect] = useState(4 / 5);
+  const [previewAspect, setPreviewAspect] = useState(OUTPUT_ASPECT);
   const [isDragging, setIsDragging] = useState(false);
-
-  const settings = useMemo(() => ({ mono, noise, skull }), [mono, noise, skull]);
 
   useEffect(() => {
     void loadImage(SKULL_SRC).then((image) => {
@@ -208,10 +269,12 @@ export default function Home() {
   }, [file]);
 
   const processFile = useCallback(
-    async (nextFile: File) => {
+    async (nextFile: File, nextSettings = settingsRef.current) => {
       const canvas = canvasRef.current;
       const skullImage = skullImageRef.current ?? (await loadImage(SKULL_SRC));
       skullImageRef.current = skullImage;
+      const renderId = renderIdRef.current + 1;
+      renderIdRef.current = renderId;
 
       if (!canvas) {
         return;
@@ -227,7 +290,10 @@ export default function Home() {
       setStatus("rendering");
 
       try {
-        await renderSkullMeme(nextFile, canvas, skullImage, settings);
+        await renderSkullMeme(nextFile, canvas, skullImage, nextSettings);
+        if (renderId !== renderIdRef.current) {
+          return;
+        }
         setPreviewUrl(canvas.toDataURL("image/png", 0.95));
         setPreviewAspect(canvas.width / canvas.height);
         setStatus("ready");
@@ -235,15 +301,29 @@ export default function Home() {
         setStatus("error");
       }
     },
-    [settings],
+    [],
   );
 
-  useEffect(() => {
-    const latestFile = latestFileRef.current;
-    if (latestFile) {
-      void processFile(latestFile);
-    }
-  }, [processFile]);
+  const updateSetting = useCallback(
+    (key: keyof EffectSettings, value: number) => {
+      const nextSettings = { ...settingsRef.current, [key]: value };
+      settingsRef.current = nextSettings;
+
+      if (key === "mono") {
+        setMono(value);
+      } else if (key === "noise") {
+        setNoise(value);
+      } else {
+        setSkull(value);
+      }
+
+      const latestFile = latestFileRef.current;
+      if (latestFile) {
+        void processFile(latestFile, nextSettings);
+      }
+    },
+    [processFile],
+  );
 
   const onFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const selectedFile = event.target.files?.[0];
@@ -316,9 +396,9 @@ export default function Home() {
             ) : null}
           </label>
 
-          <Control id="mono" label={T.mono} value={mono} min={0} max={100} onChange={setMono} />
-          <Control id="noise" label={T.noise} value={noise} min={0} max={100} onChange={setNoise} />
-          <Control id="skull" label={T.skull} value={skull} min={35} max={100} onChange={setSkull} />
+          <Control id="mono" label={T.mono} value={mono} min={0} max={100} onChange={(value) => updateSetting("mono", value)} />
+          <Control id="noise" label={T.noise} value={noise} min={0} max={100} onChange={(value) => updateSetting("noise", value)} />
+          <Control id="skull" label={T.skull} value={skull} min={0} max={100} onChange={(value) => updateSetting("skull", value)} />
 
           <div className="grid grid-cols-2 gap-3">
             <button
@@ -392,6 +472,7 @@ function Control({
         max={max}
         type="range"
         value={value}
+        onInput={(event) => onChange(Number(event.currentTarget.value))}
         onChange={(event) => onChange(Number(event.target.value))}
       />
     </div>
