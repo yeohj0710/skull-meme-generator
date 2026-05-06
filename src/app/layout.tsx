@@ -13,8 +13,31 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://skull-meme-generator.vercel.app"),
   title: "Skull Meme Generator",
-  description: "\uBE0C\uB77C\uC6B0\uC800\uC5D0\uC11C \uC774\uBBF8\uC9C0\uB97C \uD574\uACE8 \uBC08\uC73C\uB85C \uB9CC\uB4DC\uB294 \uC0DD\uC131\uAE30.",
+  description: "Create phonk-style skull meme images in your browser. Upload a photo, tune the cinematic noise, and download a PNG without sending your image to a server.",
+  alternates: {
+    canonical: "/",
+  },
+  openGraph: {
+    title: "Skull Meme Generator",
+    description: "Create phonk-style skull meme images in your browser.",
+    url: "/",
+    siteName: "Skull Meme Generator",
+    type: "website",
+  },
+  twitter: {
+    card: "summary",
+    title: "Skull Meme Generator",
+    description: "Create phonk-style skull meme images in your browser.",
+  },
+  authors: [{ name: "yeohj0710" }],
+  creator: "yeohj0710",
+  applicationName: "Skull Meme Generator",
+  robots: {
+    index: true,
+    follow: true,
+  },
 };
 
 export default function RootLayout({

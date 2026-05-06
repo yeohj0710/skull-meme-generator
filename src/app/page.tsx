@@ -90,48 +90,103 @@ function drawVignette(ctx: CanvasRenderingContext2D, width: number, height: numb
 }
 
 function drawNoise(ctx: CanvasRenderingContext2D, width: number, height: number, noise: number) {
-  const specks = Math.floor(width * height * (0.002 + noise * 0.011));
+  if (noise <= 0.01) {
+    return;
+  }
+
+  const specks = Math.floor(width * height * (0.002 + noise * 0.05));
 
   for (let i = 0; i < specks; i += 1) {
     const value = Math.random() > 0.52 ? 255 : 0;
-    const alpha = Math.random() * 0.045 + noise * 0.025;
+    const alpha = Math.random() * (0.03 + noise * 0.12) + noise * 0.035;
     ctx.fillStyle = `rgba(${value},${value},${value},${alpha})`;
-    const size = Math.random() > 0.92 ? 2 : 1;
+    const size = Math.random() > 0.86 - noise * 0.18 ? 2 + Math.random() * 2 : 1;
     ctx.fillRect(Math.random() * width, Math.random() * height, size, size);
   }
 }
 
 function drawScanlines(ctx: CanvasRenderingContext2D, width: number, height: number, noise: number) {
+  if (noise <= 0.01) {
+    return;
+  }
+
   ctx.save();
-  ctx.globalAlpha = 0.055 + noise * 0.07;
+  ctx.globalAlpha = 0.03 + noise * 0.18;
   ctx.fillStyle = "#050505";
-  for (let y = 0; y < height; y += 4) {
-    ctx.fillRect(0, y, width, 1);
+  const step = noise > 0.7 ? 3 : 4;
+  for (let y = 0; y < height; y += step) {
+    ctx.fillRect(0, y, width, noise > 0.78 ? 1.6 : 1);
   }
   ctx.restore();
 }
 
 function drawLightBloom(ctx: CanvasRenderingContext2D, width: number, height: number, noise: number) {
+  if (noise <= 0.01) {
+    return;
+  }
+
   ctx.save();
   ctx.globalCompositeOperation = "screen";
   const bottom = ctx.createRadialGradient(width * 0.52, height * 0.86, 0, width * 0.52, height * 0.86, width * 0.62);
-  bottom.addColorStop(0, `rgba(255,255,255,${0.12 + noise * 0.14})`);
-  bottom.addColorStop(0.28, `rgba(175,190,190,${0.08 + noise * 0.08})`);
+  bottom.addColorStop(0, `rgba(255,255,255,${0.04 + noise * 0.22})`);
+  bottom.addColorStop(0.24, `rgba(190,205,205,${0.03 + noise * 0.1})`);
   bottom.addColorStop(1, "rgba(255,255,255,0)");
   ctx.fillStyle = bottom;
   ctx.fillRect(0, 0, width, height);
 
   const side = ctx.createLinearGradient(0, 0, width, height);
-  side.addColorStop(0, `rgba(255,255,255,${0.02 + noise * 0.05})`);
+  side.addColorStop(0, `rgba(255,255,255,${0.02 + noise * 0.04})`);
   side.addColorStop(0.46, "rgba(255,255,255,0)");
-  side.addColorStop(1, `rgba(255,255,255,${0.03 + noise * 0.04})`);
+  side.addColorStop(1, `rgba(255,255,255,${0.02 + noise * 0.08})`);
   ctx.fillStyle = side;
   ctx.fillRect(0, 0, width, height);
   ctx.restore();
 }
 
+function drawPhonkStreaks(ctx: CanvasRenderingContext2D, width: number, height: number, noise: number) {
+  if (noise <= 0.01) {
+    return;
+  }
+
+  ctx.save();
+  ctx.globalCompositeOperation = "screen";
+  ctx.lineCap = "round";
+  const streaks = Math.floor(noise * 18);
+
+  for (let i = 0; i < streaks; i += 1) {
+    const x = Math.random() * width;
+    const y = height * (0.12 + Math.random() * 0.76);
+    const length = width * (0.06 + Math.random() * 0.22);
+    ctx.globalAlpha = 0.05 + Math.random() * noise * 0.22;
+    ctx.lineWidth = 1 + Math.random() * 3;
+    ctx.strokeStyle = Math.random() > 0.72 ? "#ffffff" : Math.random() > 0.5 ? "#85e6ff" : "#ff466b";
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + length, y - length * (0.4 + Math.random() * 0.55));
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
+function drawFatalCrush(ctx: CanvasRenderingContext2D, width: number, height: number, noise: number) {
+  if (noise <= 0.01) {
+    return;
+  }
+
+  ctx.save();
+  ctx.globalCompositeOperation = "multiply";
+  ctx.fillStyle = `rgba(0,0,0,${noise * 0.16})`;
+  ctx.fillRect(0, 0, width, height);
+  ctx.restore();
+}
+
 function drawFilmScratches(ctx: CanvasRenderingContext2D, width: number, height: number, noise: number) {
-  const scratches = Math.floor(8 + noise * 34);
+  if (noise <= 0.01) {
+    return;
+  }
+
+  const scratches = Math.floor(noise * 72);
   ctx.save();
   ctx.globalCompositeOperation = "screen";
   ctx.lineCap = "round";
@@ -141,7 +196,7 @@ function drawFilmScratches(ctx: CanvasRenderingContext2D, width: number, height:
     const y = Math.random() * height;
     const length = height * (0.025 + Math.random() * 0.12);
     const lean = (Math.random() - 0.5) * width * 0.035;
-    ctx.globalAlpha = 0.04 + Math.random() * (0.08 + noise * 0.12);
+    ctx.globalAlpha = 0.03 + Math.random() * (0.08 + noise * 0.28);
     ctx.lineWidth = Math.random() > 0.82 ? 2 : 1;
     ctx.strokeStyle = Math.random() > 0.72 ? "#ffffff" : "#bfc7c7";
     ctx.beginPath();
@@ -154,15 +209,38 @@ function drawFilmScratches(ctx: CanvasRenderingContext2D, width: number, height:
 }
 
 function drawShakeSlices(ctx: CanvasRenderingContext2D, width: number, height: number, noise: number) {
-  const slices = Math.floor(3 + noise * 9);
+  if (noise <= 0.01) {
+    return;
+  }
+
+  const slices = Math.floor(noise * 18);
   ctx.save();
-  ctx.globalAlpha = 0.05 + noise * 0.09;
+  ctx.globalAlpha = 0.04 + noise * 0.18;
   for (let i = 0; i < slices; i += 1) {
-    const sliceHeight = 3 + Math.random() * (height * 0.014);
+    const sliceHeight = 4 + Math.random() * (height * (0.01 + noise * 0.02));
     const y = Math.random() * height;
-    const shift = (Math.random() - 0.5) * (width * (0.01 + noise * 0.02));
+    const shift = (Math.random() - 0.5) * (width * (0.01 + noise * 0.065));
     ctx.drawImage(ctx.canvas, 0, y, width, sliceHeight, shift, y, width, sliceHeight);
   }
+  ctx.restore();
+}
+
+function drawChromaticShock(ctx: CanvasRenderingContext2D, width: number, height: number, noise: number) {
+  if (noise <= 0.01) {
+    return;
+  }
+
+  const offset = width * (0.002 + noise * 0.012);
+  ctx.save();
+  ctx.globalCompositeOperation = "screen";
+  ctx.globalAlpha = noise * 0.12;
+  ctx.fillStyle = "rgba(255, 36, 72, 0.8)";
+  ctx.fillRect(-offset, 0, width, height);
+  ctx.drawImage(ctx.canvas, -offset, 0);
+  ctx.globalAlpha = noise * 0.1;
+  ctx.fillStyle = "rgba(60, 170, 255, 0.65)";
+  ctx.fillRect(offset, 0, width, height);
+  ctx.drawImage(ctx.canvas, offset, 0);
   ctx.restore();
 }
 
@@ -203,11 +281,14 @@ async function renderSkullMeme(file: File, canvas: HTMLCanvasElement, skullImage
   ctx.fillRect(0, 0, width, height);
 
   drawBasePhoto(ctx, bitmap, width, height, mono);
+  drawChromaticShock(ctx, width, height, noise);
   drawShakeSlices(ctx, width, height, noise);
   drawVignette(ctx, width, height, atmosphere);
+  drawFatalCrush(ctx, width, height, noise);
   drawLightBloom(ctx, width, height, noise);
   drawScanlines(ctx, width, height, noise);
   drawFilmScratches(ctx, width, height, noise);
+  drawPhonkStreaks(ctx, width, height, noise);
   drawNoise(ctx, width, height, noise);
   drawSkullAsset(ctx, skullImage, width, height, skull);
 
@@ -344,9 +425,31 @@ export default function Home() {
   const ready = status === "ready";
   const previewWidth = previewAspect >= 1 ? "min(100%, 860px)" : `min(100%, ${Math.round(previewAspect * 620)}px)`;
   const previewHeight = previewAspect < 1 ? "min(62dvh, 620px)" : "auto";
+  const structuredData = {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    name: "Skull Meme Generator",
+    url: "https://skull-meme-generator.vercel.app",
+    applicationCategory: "MultimediaApplication",
+    operatingSystem: "Any",
+    creator: {
+      "@type": "Person",
+      name: "yeohj0710",
+    },
+    description: "Create phonk-style skull meme images in your browser and download them as PNG files.",
+    offers: {
+      "@type": "Offer",
+      price: "0",
+      priceCurrency: "USD",
+    },
+  };
 
   return (
     <main className="min-h-dvh overflow-x-hidden bg-[#070708] text-zinc-50">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
+      />
       <section className="mx-auto flex min-h-dvh w-full max-w-3xl flex-col px-4 py-4 sm:px-6 lg:px-8">
         <header className="flex h-14 shrink-0 items-center justify-between border-b border-white/10">
           <div className="flex min-w-0 items-center gap-3">
