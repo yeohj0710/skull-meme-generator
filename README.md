@@ -1,12 +1,15 @@
 # Skull Meme Generator
 
-A tiny Next.js app that turns an uploaded image into a phonk-style skull meme PNG.
+A tiny Next.js app that turns an uploaded image into a skull emoji meme PNG.
+
+Developed by yeohj0710.
 
 ## What it does
 
 - Processes images entirely in the browser with Canvas.
 - Keeps user uploads off the server.
-- Exports a 1200 x 1200 PNG.
+- Preserves the uploaded image aspect ratio.
+- Includes adjustable monochrome, noise, and skull size controls.
 - Attempts auto-download after upload, with a manual download button as backup.
 - Deploys as a static Next.js route on Vercel.
 
