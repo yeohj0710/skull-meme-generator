@@ -1,7 +1,7 @@
 "use client";
 
 import { ChangeEvent, DragEvent, FormEvent, PointerEvent, TouchEvent, useCallback, useEffect, useRef, useState } from "react";
-import { Download, ImagePlus, RefreshCw, Skull, UploadCloud } from "lucide-react";
+import { Download, ImagePlus, LoaderCircle, RefreshCw, Skull, UploadCloud } from "lucide-react";
 
 type RenderStatus = "idle" | "rendering" | "ready" | "error";
 
@@ -509,9 +509,7 @@ export default function Home() {
               </span>
             ) : null}
             {status === "rendering" ? (
-              <div className="absolute inset-0 grid place-items-center bg-black/72 text-sm font-semibold tracking-[0.18em] text-zinc-200">
-                {T.processing}
-              </div>
+              <LoadingOverlay label={T.processing} />
             ) : null}
           </label>
 
@@ -558,8 +556,12 @@ export default function Home() {
               disabled={!file || status === "rendering"}
               onClick={() => file && void processFile(file)}
             >
-              <RefreshCw className="size-4" aria-hidden="true" />
-              {T.remix}
+              {status === "rendering" ? (
+                <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <RefreshCw className="size-4" aria-hidden="true" />
+              )}
+              {status === "rendering" ? T.processing : T.remix}
             </button>
           </div>
 
@@ -583,6 +585,17 @@ export default function Home() {
         </div>
       </section>
     </main>
+  );
+}
+
+function LoadingOverlay({ label }: { label: string }) {
+  return (
+    <div className="absolute inset-0 grid place-items-center bg-black/72 text-zinc-200">
+      <div className="flex flex-col items-center gap-3">
+        <LoaderCircle className="size-8 animate-spin" aria-hidden="true" />
+        <span className="text-sm font-semibold tracking-[0.18em]">{label}</span>
+      </div>
+    </div>
   );
 }
 
