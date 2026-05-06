@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, DragEvent, KeyboardEvent, PointerEvent, useCallback, useEffect, useRef, useState } from "react";
+import { ChangeEvent, DragEvent, FormEvent, KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
 import { Download, ImagePlus, LoaderCircle, RotateCcw, Skull, UploadCloud } from "lucide-react";
 
 type RenderStatus = "idle" | "rendering" | "ready" | "error";
@@ -246,7 +246,7 @@ function drawChromaticShock(ctx: CanvasRenderingContext2D, width: number, height
 }
 
 function drawSkullAsset(ctx: CanvasRenderingContext2D, skullImage: HTMLImageElement, width: number, height: number, skull: number) {
-  const size = clamp(width * (0.1 + skull * 0.2), 72, width * 0.34);
+  const size = clamp(width * (0.12 + skull * 0.3), width * 0.12, width * 0.42);
   const x = width / 2 - size / 2 + (Math.random() - 0.5) * size * 0.05;
   const y = height * 0.78 - size / 2 + (Math.random() - 0.5) * size * 0.05;
 
@@ -272,7 +272,7 @@ async function renderSkullMeme(file: File, canvas: HTMLCanvasElement, skullImage
   const height = OUTPUT_HEIGHT;
   const mono = clamp(settings.mono / 100, 0, 1);
   const noise = clamp(settings.noise / 100, 0, 1);
-  const skull = clamp(settings.skull / 100, 0.35, 1);
+  const skull = clamp(settings.skull / 100, 0, 1);
   const atmosphere = clamp((mono + noise) / 2, 0.05, 1);
 
   canvas.width = width;
@@ -400,14 +400,18 @@ export default function Home() {
         setSkull(value);
       }
 
-      if (commit) {
-        const latestFile = latestFileRef.current;
+      const latestFile = latestFileRef.current;
+      if (latestFile) {
         if (renderTimerRef.current) {
           window.clearTimeout(renderTimerRef.current);
         }
 
-        if (latestFile) {
+        if (commit) {
           void processFile(latestFile, nextSettings);
+        } else {
+          renderTimerRef.current = window.setTimeout(() => {
+            void processFile(latestFileRef.current ?? latestFile, settingsRef.current);
+          }, 350);
         }
       }
     },
@@ -630,8 +634,6 @@ function Control({
   onChange: (value: number) => void;
   onCommit: (value: number) => void;
 }) {
-  const trackRef = useRef<HTMLDivElement>(null);
-  const activePointerRef = useRef<number | null>(null);
   const latestValueRef = useRef(value);
   const percent = ((value - min) / (max - min)) * 100;
 
@@ -639,19 +641,7 @@ function Control({
     latestValueRef.current = value;
   }, [value]);
 
-  const valueFromClientX = (clientX: number) => {
-    const track = trackRef.current;
-    if (!track) {
-      return latestValueRef.current;
-    }
-
-    const rect = track.getBoundingClientRect();
-    const ratio = clamp((clientX - rect.left) / rect.width, 0, 1);
-    return Math.round(min + ratio * (max - min));
-  };
-
-  const updateFromClientX = (clientX: number, commit = false) => {
-    const nextValue = valueFromClientX(clientX);
+  const updateValue = (nextValue: number, commit = false) => {
     latestValueRef.current = nextValue;
 
     if (commit) {
@@ -661,58 +651,8 @@ function Control({
     }
   };
 
-  const startDrag = (clientX: number, pointerId: number, target: HTMLDivElement) => {
-    activePointerRef.current = pointerId;
-    try {
-      target.setPointerCapture(pointerId);
-    } catch {
-      // Some embedded mobile browsers do not allow synthetic pointer capture.
-    }
-    updateFromClientX(clientX);
-  };
-
-  const handlePointerDown = (event: PointerEvent<HTMLDivElement>) => {
-    if (event.pointerType === "mouse" && event.button !== 0) {
-      return;
-    }
-
-    event.preventDefault();
-    startDrag(event.clientX, event.pointerId, event.currentTarget);
-  };
-
-  const handlePointerMove = (event: PointerEvent<HTMLDivElement>) => {
-    if (activePointerRef.current !== event.pointerId) {
-      return;
-    }
-
-    event.preventDefault();
-    updateFromClientX(event.clientX);
-  };
-
-  const handlePointerUp = (event: PointerEvent<HTMLDivElement>) => {
-    if (activePointerRef.current !== event.pointerId) {
-      return;
-    }
-
-    event.preventDefault();
-    activePointerRef.current = null;
-    try {
-      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-        event.currentTarget.releasePointerCapture(event.pointerId);
-      }
-    } catch {
-      // Matching the capture fallback above.
-    }
-    updateFromClientX(event.clientX, true);
-  };
-
-  const handlePointerCancel = (event: PointerEvent<HTMLDivElement>) => {
-    if (activePointerRef.current !== event.pointerId) {
-      return;
-    }
-
-    activePointerRef.current = null;
-    onCommit(latestValueRef.current);
+  const handleRangeInput = (event: ChangeEvent<HTMLInputElement> | FormEvent<HTMLInputElement>) => {
+    updateValue(Number(event.currentTarget.value));
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -736,45 +676,9 @@ function Control({
     onCommit(nextValue);
   };
 
-  useEffect(() => {
-    const handleWindowPointerMove = (event: globalThis.PointerEvent) => {
-      if (activePointerRef.current !== event.pointerId) {
-        return;
-      }
-
-      event.preventDefault();
-      updateFromClientX(event.clientX);
-    };
-
-    const handleWindowPointerUp = (event: globalThis.PointerEvent) => {
-      if (activePointerRef.current !== event.pointerId) {
-        return;
-      }
-
-      event.preventDefault();
-      activePointerRef.current = null;
-      updateFromClientX(event.clientX, true);
-    };
-
-    const handleWindowPointerCancel = (event: globalThis.PointerEvent) => {
-      if (activePointerRef.current !== event.pointerId) {
-        return;
-      }
-
-      activePointerRef.current = null;
-      onCommit(latestValueRef.current);
-    };
-
-    window.addEventListener("pointermove", handleWindowPointerMove, { passive: false });
-    window.addEventListener("pointerup", handleWindowPointerUp, { passive: false });
-    window.addEventListener("pointercancel", handleWindowPointerCancel, { passive: false });
-
-    return () => {
-      window.removeEventListener("pointermove", handleWindowPointerMove);
-      window.removeEventListener("pointerup", handleWindowPointerUp);
-      window.removeEventListener("pointercancel", handleWindowPointerCancel);
-    };
-  });
+  const commitLatestValue = () => {
+    onCommit(latestValueRef.current);
+  };
 
   return (
     <div className="border border-white/10 bg-white/[0.035] p-4">
@@ -785,22 +689,31 @@ function Control({
         <span className="font-mono text-sm text-zinc-300">{value}</span>
       </div>
       <div
-        id={id}
-        ref={trackRef}
         aria-labelledby={`${id}-label`}
-        aria-valuemax={max}
-        aria-valuemin={min}
-        aria-valuenow={value}
-        className="relative mt-4 h-11 touch-none select-none"
+        className="relative mt-4 h-11 select-none"
         onKeyDown={handleKeyDown}
-        onPointerCancel={handlePointerCancel}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        role="slider"
         style={{ touchAction: "none" }}
-        tabIndex={0}
       >
+        <input
+          id={id}
+          aria-labelledby={`${id}-label`}
+          aria-valuemax={max}
+          aria-valuemin={min}
+          aria-valuenow={value}
+          className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
+          max={max}
+          min={min}
+          onBlur={commitLatestValue}
+          onChange={handleRangeInput}
+          onInput={handleRangeInput}
+          onMouseUp={commitLatestValue}
+          onPointerUp={commitLatestValue}
+          onTouchEnd={commitLatestValue}
+          step={1}
+          style={{ touchAction: "none" }}
+          type="range"
+          value={value}
+        />
         <div className="pointer-events-none absolute left-0 top-1/2 h-1 w-full -translate-y-1/2 bg-white/30" />
         <div className="pointer-events-none absolute left-0 top-1/2 h-1 -translate-y-1/2 bg-white" style={{ width: `${percent}%` }} />
         <div
