@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, DragEvent, useCallback, useEffect, useRef, useState } from "react";
+import { ChangeEvent, DragEvent, MouseEvent, PointerEvent, TouchEvent, useCallback, useEffect, useRef, useState } from "react";
 import { Download, ImagePlus, RefreshCw, Skull, UploadCloud } from "lucide-react";
 
 type RenderStatus = "idle" | "rendering" | "ready" | "error";
@@ -325,6 +325,7 @@ export default function Home() {
   const skullImageRef = useRef<HTMLImageElement | null>(null);
   const settingsRef = useRef<EffectSettings>({ mono: 48, noise: 62, skull: 42 });
   const renderIdRef = useRef(0);
+  const renderTimerRef = useRef<number | null>(null);
   const [status, setStatus] = useState<RenderStatus>("idle");
   const [file, setFile] = useState<File | null>(null);
   const [mono, setMono] = useState(48);
@@ -386,7 +387,7 @@ export default function Home() {
   );
 
   const updateSetting = useCallback(
-    (key: keyof EffectSettings, value: number) => {
+    (key: keyof EffectSettings, value: number, immediate = false) => {
       const nextSettings = { ...settingsRef.current, [key]: value };
       settingsRef.current = nextSettings;
 
@@ -400,7 +401,17 @@ export default function Home() {
 
       const latestFile = latestFileRef.current;
       if (latestFile) {
-        void processFile(latestFile, nextSettings);
+        if (renderTimerRef.current) {
+          window.clearTimeout(renderTimerRef.current);
+        }
+
+        if (immediate) {
+          void processFile(latestFile, nextSettings);
+        } else {
+          renderTimerRef.current = window.setTimeout(() => {
+            void processFile(latestFileRef.current ?? latestFile, settingsRef.current);
+          }, 120);
+        }
       }
     },
     [processFile],
@@ -499,9 +510,33 @@ export default function Home() {
             ) : null}
           </label>
 
-          <Control id="mono" label={T.mono} value={mono} min={0} max={100} onChange={(value) => updateSetting("mono", value)} />
-          <Control id="noise" label={T.noise} value={noise} min={0} max={100} onChange={(value) => updateSetting("noise", value)} />
-          <Control id="skull" label={T.skull} value={skull} min={0} max={100} onChange={(value) => updateSetting("skull", value)} />
+          <Control
+            id="mono"
+            label={T.mono}
+            value={mono}
+            min={0}
+            max={100}
+            onChange={(value) => updateSetting("mono", value)}
+            onCommit={(value) => updateSetting("mono", value, true)}
+          />
+          <Control
+            id="noise"
+            label={T.noise}
+            value={noise}
+            min={0}
+            max={100}
+            onChange={(value) => updateSetting("noise", value)}
+            onCommit={(value) => updateSetting("noise", value, true)}
+          />
+          <Control
+            id="skull"
+            label={T.skull}
+            value={skull}
+            min={0}
+            max={100}
+            onChange={(value) => updateSetting("skull", value)}
+            onCommit={(value) => updateSetting("skull", value, true)}
+          />
 
           <div className="grid grid-cols-2 gap-3">
             <button
@@ -552,6 +587,7 @@ function Control({
   min,
   max,
   onChange,
+  onCommit,
 }: {
   id: string;
   label: string;
@@ -559,25 +595,112 @@ function Control({
   min: number;
   max: number;
   onChange: (value: number) => void;
+  onCommit: (value: number) => void;
 }) {
+  const trackRef = useRef<HTMLDivElement>(null);
+  const latestValueRef = useRef(value);
+  const percent = ((value - min) / (max - min)) * 100;
+
+  useEffect(() => {
+    latestValueRef.current = value;
+  }, [value]);
+
+  const valueFromClientX = (clientX: number) => {
+    const track = trackRef.current;
+    if (!track) {
+      return latestValueRef.current;
+    }
+
+    const rect = track.getBoundingClientRect();
+    const ratio = clamp((clientX - rect.left) / rect.width, 0, 1);
+    return Math.round(min + ratio * (max - min));
+  };
+
+  const updateFromClientX = (clientX: number, commit = false) => {
+    const nextValue = valueFromClientX(clientX);
+    latestValueRef.current = nextValue;
+
+    if (commit) {
+      onCommit(nextValue);
+    } else {
+      onChange(nextValue);
+    }
+  };
+
+  const handlePointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    updateFromClientX(event.clientX);
+  };
+
+  const handlePointerMove = (event: PointerEvent<HTMLDivElement>) => {
+    if (!event.currentTarget.hasPointerCapture(event.pointerId)) {
+      return;
+    }
+
+    updateFromClientX(event.clientX);
+  };
+
+  const handlePointerUp = (event: PointerEvent<HTMLDivElement>) => {
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+
+    updateFromClientX(event.clientX, true);
+  };
+
+  const handleClick = (event: MouseEvent<HTMLDivElement>) => {
+    updateFromClientX(event.clientX, true);
+  };
+
+  const handleTouchStart = (event: TouchEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    updateFromClientX(event.touches[0].clientX);
+  };
+
+  const handleTouchMove = (event: TouchEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    updateFromClientX(event.touches[0].clientX);
+  };
+
+  const handleTouchEnd = () => {
+    onCommit(latestValueRef.current);
+  };
+
   return (
     <div className="border border-white/10 bg-white/[0.035] p-4">
       <div className="flex items-center justify-between gap-3">
-        <label htmlFor={id} className="text-sm font-medium text-zinc-200">
+        <span id={`${id}-label`} className="text-sm font-medium text-zinc-200">
           {label}
-        </label>
+        </span>
         <span className="font-mono text-sm text-zinc-300">{value}</span>
       </div>
-      <input
+      <div
         id={id}
-        className="mt-4 h-2 w-full accent-white"
-        min={min}
-        max={max}
-        type="range"
-        value={value}
-        onInput={(event) => onChange(Number(event.currentTarget.value))}
-        onChange={(event) => onChange(Number(event.target.value))}
-      />
+        ref={trackRef}
+        aria-labelledby={`${id}-label`}
+        aria-valuemax={max}
+        aria-valuemin={min}
+        aria-valuenow={value}
+        className="relative mt-4 h-8 touch-none select-none"
+        onClick={handleClick}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        role="slider"
+        tabIndex={0}
+      >
+        <span className="pointer-events-none absolute left-0 top-1/2 h-1 w-full -translate-y-1/2 bg-white/30" />
+        <span className="pointer-events-none absolute left-0 top-1/2 h-1 -translate-y-1/2 bg-white" style={{ width: `${percent}%` }} />
+        <span
+          className="pointer-events-none absolute top-1/2 size-4 -translate-x-1/2 -translate-y-1/2 bg-white shadow-[0_0_18px_rgba(255,255,255,0.25)]"
+          style={{ left: `${percent}%` }}
+        />
+      </div>
     </div>
   );
 }
