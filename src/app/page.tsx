@@ -467,7 +467,10 @@ export default function Home() {
             <div className="grid size-9 shrink-0 place-items-center border border-white/15 bg-white text-black">
               <Skull className="size-4" aria-hidden="true" />
             </div>
-            <h1 className="truncate text-base font-semibold tracking-normal sm:text-lg">{T.title}</h1>
+            <div className="min-w-0">
+              <h1 className="truncate text-base font-semibold tracking-normal sm:text-lg">{T.title}</h1>
+              <p className="truncate text-xs font-medium text-zinc-400">Developed by yeohj0710</p>
+            </div>
           </div>
           <span className="shrink-0 font-mono text-sm text-zinc-500">PNG</span>
         </header>
@@ -572,7 +575,9 @@ export default function Home() {
             <p className="border border-white/30 bg-white/10 p-3 text-sm text-zinc-200">{T.error}</p>
           ) : null}
 
-          <p className="pb-2 text-xs text-zinc-500">Developed by yeohj0710.</p>
+          <p className="border-t border-white/10 pb-2 pt-4 text-center text-sm font-semibold text-zinc-300">
+            Developed by yeohj0710
+          </p>
         </div>
         <canvas ref={canvasRef} className="hidden" />
       </section>
