@@ -1,15 +1,52 @@
 "use client";
 
-import { ChangeEvent, DragEvent, useCallback, useEffect, useRef, useState } from "react";
+import { ChangeEvent, DragEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Download, ImagePlus, RefreshCw, Skull, UploadCloud } from "lucide-react";
 
 type RenderStatus = "idle" | "rendering" | "ready" | "error";
 
+type EffectSettings = {
+  mono: number;
+  noise: number;
+  skull: number;
+};
+
 const MAX_OUTPUT_SIDE = 1920;
 const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/avif"];
 
+const SKULL_SVG = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(`
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <filter id="s" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="6" stdDeviation="5" flood-color="#000" flood-opacity=".65"/>
+    </filter>
+    <linearGradient id="bone" x1="22" x2="102" y1="8" y2="118" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#fff"/>
+      <stop offset=".55" stop-color="#e9e9e6"/>
+      <stop offset="1" stop-color="#bdbab2"/>
+    </linearGradient>
+  </defs>
+  <g filter="url(#s)">
+    <path fill="url(#bone)" d="M64 9c-29 0-50 20-50 48 0 17 8 30 20 38v13c0 7 5 12 12 12h36c7 0 12-5 12-12V95c12-8 20-21 20-38 0-28-21-48-50-48Z"/>
+    <path fill="#111" d="M43 61c0 10-7 18-16 18-8 0-13-8-13-17s6-18 15-18c8 0 14 7 14 17Zm71 1c0 9-5 17-13 17-9 0-16-8-16-18 0-10 6-17 14-17 9 0 15 9 15 18ZM64 72c-6 9-11 19-9 25 2 5 16 5 18 0 2-6-3-16-9-25Z"/>
+    <path fill="#141414" d="M38 103h52v12H38z"/>
+    <path stroke="#eee" stroke-width="5" stroke-linecap="round" d="M48 102v16m11-17v18m11-18v18m11-17v16"/>
+    <path fill="#fff" opacity=".28" d="M34 23c15-11 39-13 57 0-18-5-39-4-57 0Z"/>
+  </g>
+</svg>
+`)}`;
+
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
+}
+
+function loadImage(src: string) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = reject;
+    image.src = src;
+  });
 }
 
 function getOutputSize(image: ImageBitmap) {
@@ -20,52 +57,44 @@ function getOutputSize(image: ImageBitmap) {
   };
 }
 
-function drawBasePhoto(ctx: CanvasRenderingContext2D, image: ImageBitmap, width: number, height: number, impact: number) {
+function drawBasePhoto(ctx: CanvasRenderingContext2D, image: ImageBitmap, width: number, height: number, mono: number) {
   ctx.save();
   ctx.filter = [
-    `grayscale(${impact})`,
-    `contrast(${1.02 + impact * 0.12})`,
-    `saturate(${1 - impact * 0.72})`,
-    `brightness(${0.72 - impact * 0.16})`,
+    `grayscale(${mono})`,
+    `contrast(${1.03 + mono * 0.11})`,
+    `saturate(${1 - mono * 0.68})`,
+    `brightness(${0.74 - mono * 0.15})`,
   ].join(" ");
   ctx.drawImage(image, 0, 0, width, height);
   ctx.restore();
-
-  ctx.save();
-  ctx.globalAlpha = 0.09 + impact * 0.08;
-  ctx.filter = "blur(1px)";
-  ctx.drawImage(image, -2 - impact * 7, 0, width, height);
-  ctx.drawImage(image, 2 + impact * 6, 0, width, height);
-  ctx.restore();
 }
 
-function drawVignette(ctx: CanvasRenderingContext2D, width: number, height: number, impact: number) {
+function drawVignette(ctx: CanvasRenderingContext2D, width: number, height: number, strength: number) {
   const radius = Math.max(width, height) * 0.72;
   const gradient = ctx.createRadialGradient(width / 2, height * 0.38, 0, width / 2, height / 2, radius);
   gradient.addColorStop(0, "rgba(0,0,0,0)");
-  gradient.addColorStop(0.58, `rgba(0,0,0,${0.18 + impact * 0.1})`);
-  gradient.addColorStop(1, `rgba(0,0,0,${0.62 + impact * 0.18})`);
+  gradient.addColorStop(0.55, `rgba(0,0,0,${0.2 + strength * 0.08})`);
+  gradient.addColorStop(1, `rgba(0,0,0,${0.62 + strength * 0.18})`);
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, width, height);
-
-  ctx.fillStyle = `rgba(0,0,0,${0.1 + impact * 0.12})`;
+  ctx.fillStyle = `rgba(0,0,0,${0.06 + strength * 0.1})`;
   ctx.fillRect(0, 0, width, height);
 }
 
-function drawNoise(ctx: CanvasRenderingContext2D, width: number, height: number, impact: number) {
-  const specks = Math.floor(width * height * (0.012 + impact * 0.016));
+function drawNoise(ctx: CanvasRenderingContext2D, width: number, height: number, noise: number) {
+  const specks = Math.floor(width * height * (0.006 + noise * 0.025));
 
   for (let i = 0; i < specks; i += 1) {
-    const value = Math.random() > 0.5 ? 255 : 0;
-    const alpha = Math.random() * 0.08 + impact * 0.035;
+    const value = Math.random() > 0.52 ? 255 : 0;
+    const alpha = Math.random() * 0.09 + noise * 0.045;
     ctx.fillStyle = `rgba(${value},${value},${value},${alpha})`;
     ctx.fillRect(Math.random() * width, Math.random() * height, 1, 1);
   }
 }
 
-function drawScanlines(ctx: CanvasRenderingContext2D, width: number, height: number, impact: number) {
+function drawScanlines(ctx: CanvasRenderingContext2D, width: number, height: number, noise: number) {
   ctx.save();
-  ctx.globalAlpha = 0.08 + impact * 0.06;
+  ctx.globalAlpha = 0.07 + noise * 0.08;
   ctx.fillStyle = "#050505";
   for (let y = 0; y < height; y += 4) {
     ctx.fillRect(0, y, width, 1);
@@ -73,52 +102,34 @@ function drawScanlines(ctx: CanvasRenderingContext2D, width: number, height: num
   ctx.restore();
 }
 
-function drawShakeSlices(ctx: CanvasRenderingContext2D, width: number, height: number, impact: number) {
-  const slices = Math.floor(5 + impact * 12);
-
+function drawShakeSlices(ctx: CanvasRenderingContext2D, width: number, height: number, noise: number) {
+  const slices = Math.floor(4 + noise * 10);
   ctx.save();
-  ctx.globalAlpha = 0.08 + impact * 0.08;
+  ctx.globalAlpha = 0.08 + noise * 0.1;
   for (let i = 0; i < slices; i += 1) {
-    const sliceHeight = 3 + Math.random() * (height * 0.018);
+    const sliceHeight = 3 + Math.random() * (height * 0.014);
     const y = Math.random() * height;
-    const shift = (Math.random() - 0.5) * (width * (0.012 + impact * 0.025));
+    const shift = (Math.random() - 0.5) * (width * (0.01 + noise * 0.02));
     ctx.drawImage(ctx.canvas, 0, y, width, sliceHeight, shift, y, width, sliceHeight);
   }
   ctx.restore();
 }
 
-function drawSkullEmoji(ctx: CanvasRenderingContext2D, width: number, height: number, impact: number) {
-  const fontSize = clamp(Math.min(width, height) * (0.065 + impact * 0.085), 38, 180);
-  const x = width / 2 + (Math.random() - 0.5) * fontSize * 0.14 * impact;
-  const y = height * 0.805 + (Math.random() - 0.5) * fontSize * 0.18 * impact;
-  const font = `${fontSize}px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif`;
+function drawSkullAsset(ctx: CanvasRenderingContext2D, skullImage: HTMLImageElement, width: number, height: number, skull: number) {
+  const size = clamp(Math.min(width, height) * (0.075 + skull * 0.105), 46, 190);
+  const x = width / 2 - size / 2 + (Math.random() - 0.5) * size * 0.08;
+  const y = height * 0.8 - size / 2 + (Math.random() - 0.5) * size * 0.08;
 
   ctx.save();
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.font = font;
-
-  ctx.globalAlpha = 0.26 + impact * 0.14;
-  ctx.filter = `blur(${1 + impact * 1.3}px)`;
-  ctx.fillText("💀", x - fontSize * 0.1, y + fontSize * 0.06);
-  ctx.fillText("💀", x + fontSize * 0.09, y - fontSize * 0.04);
-
-  ctx.globalAlpha = 0.92;
-  ctx.filter = "none";
-  ctx.shadowColor = "rgba(0,0,0,0.78)";
-  ctx.shadowBlur = fontSize * 0.18;
-  ctx.shadowOffsetY = fontSize * 0.04;
-  ctx.fillText("💀", x, y);
+  ctx.globalAlpha = 1;
+  ctx.shadowColor = "rgba(0,0,0,0.9)";
+  ctx.shadowBlur = size * 0.2;
+  ctx.shadowOffsetY = size * 0.06;
+  ctx.drawImage(skullImage, x, y, size, size);
   ctx.restore();
 }
 
-type EffectSettings = {
-  monochrome: number;
-  noise: number;
-  skullSize: number;
-};
-
-async function renderSkullMeme(file: File, canvas: HTMLCanvasElement, settings: EffectSettings) {
+async function renderSkullMeme(file: File, canvas: HTMLCanvasElement, skullImage: HTMLImageElement, settings: EffectSettings) {
   const bitmap = await createImageBitmap(file);
   const ctx = canvas.getContext("2d", { alpha: false });
 
@@ -128,10 +139,10 @@ async function renderSkullMeme(file: File, canvas: HTMLCanvasElement, settings: 
   }
 
   const { width, height } = getOutputSize(bitmap);
-  const monochrome = clamp(settings.monochrome / 100, 0, 1);
+  const mono = clamp(settings.mono / 100, 0, 1);
   const noise = clamp(settings.noise / 100, 0, 1);
-  const skullSize = clamp(settings.skullSize / 100, 0.35, 1.35);
-  const atmosphere = clamp((monochrome + noise) / 2, 0.05, 1);
+  const skull = clamp(settings.skull / 100, 0.35, 1);
+  const atmosphere = clamp((mono + noise) / 2, 0.05, 1);
 
   canvas.width = width;
   canvas.height = height;
@@ -139,12 +150,12 @@ async function renderSkullMeme(file: File, canvas: HTMLCanvasElement, settings: 
   ctx.fillStyle = "#050505";
   ctx.fillRect(0, 0, width, height);
 
-  drawBasePhoto(ctx, bitmap, width, height, monochrome);
+  drawBasePhoto(ctx, bitmap, width, height, mono);
   drawShakeSlices(ctx, width, height, noise);
   drawVignette(ctx, width, height, atmosphere);
   drawScanlines(ctx, width, height, noise);
   drawNoise(ctx, width, height, noise);
-  drawSkullEmoji(ctx, width, height, skullSize);
+  drawSkullAsset(ctx, skullImage, width, height, skull);
 
   bitmap.close();
 }
@@ -176,14 +187,23 @@ export default function Home() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const latestFileRef = useRef<File | null>(null);
+  const skullImageRef = useRef<HTMLImageElement | null>(null);
   const [status, setStatus] = useState<RenderStatus>("idle");
   const [file, setFile] = useState<File | null>(null);
-  const [monochrome, setMonochrome] = useState(78);
+  const [mono, setMono] = useState(78);
   const [noise, setNoise] = useState(58);
-  const [skullSize, setSkullSize] = useState(62);
+  const [skull, setSkull] = useState(64);
   const [previewUrl, setPreviewUrl] = useState("");
-  const [previewAspect, setPreviewAspect] = useState(1);
+  const [previewAspect, setPreviewAspect] = useState(9 / 16);
   const [isDragging, setIsDragging] = useState(false);
+
+  const settings = useMemo(() => ({ mono, noise, skull }), [mono, noise, skull]);
+
+  useEffect(() => {
+    void loadImage(SKULL_SVG).then((image) => {
+      skullImageRef.current = image;
+    });
+  }, []);
 
   const download = useCallback(() => {
     const canvas = canvasRef.current;
@@ -197,6 +217,9 @@ export default function Home() {
   const processFile = useCallback(
     async (nextFile: File) => {
       const canvas = canvasRef.current;
+      const skullImage = skullImageRef.current ?? (await loadImage(SKULL_SVG));
+      skullImageRef.current = skullImage;
+
       if (!canvas) {
         return;
       }
@@ -211,16 +234,15 @@ export default function Home() {
       setStatus("rendering");
 
       try {
-        await renderSkullMeme(nextFile, canvas, { monochrome, noise, skullSize });
-        const url = canvas.toDataURL("image/png", 0.95);
-        setPreviewUrl(url);
+        await renderSkullMeme(nextFile, canvas, skullImage, settings);
+        setPreviewUrl(canvas.toDataURL("image/png", 0.95));
         setPreviewAspect(canvas.width / canvas.height);
         setStatus("ready");
       } catch {
         setStatus("error");
       }
     },
-    [monochrome, noise, skullSize],
+    [settings],
   );
 
   useEffect(() => {
@@ -228,7 +250,7 @@ export default function Home() {
     if (latestFile) {
       void processFile(latestFile);
     }
-  }, [monochrome, noise, skullSize, processFile]);
+  }, [processFile]);
 
   const onFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const selectedFile = event.target.files?.[0];
@@ -249,7 +271,7 @@ export default function Home() {
   const ready = status === "ready";
 
   return (
-    <main className="min-h-dvh bg-[#070708] text-zinc-50">
+    <main className="min-h-dvh overflow-x-hidden bg-[#070708] text-zinc-50">
       <section className="mx-auto flex min-h-dvh w-full max-w-6xl flex-col px-4 py-4 sm:px-6 lg:px-8">
         <header className="flex h-14 shrink-0 items-center justify-between border-b border-white/10">
           <div className="flex min-w-0 items-center gap-3">
@@ -258,14 +280,14 @@ export default function Home() {
             </div>
             <h1 className="truncate text-base font-semibold tracking-normal sm:text-lg">해골 밈 생성기</h1>
           </div>
-          <span className="shrink-0 font-mono text-sm text-zinc-500">💀 PNG</span>
+          <span className="shrink-0 font-mono text-sm text-zinc-500">PNG</span>
         </header>
 
-        <div className="grid flex-1 items-stretch gap-4 py-4 lg:grid-cols-[minmax(280px,360px)_1fr]">
+        <div className="grid flex-1 items-start gap-4 py-4 lg:grid-cols-[minmax(280px,360px)_1fr]">
           <aside className="flex flex-col gap-4">
             <label
               className={[
-                "group grid min-h-48 cursor-pointer place-items-center border border-dashed p-6 text-center transition",
+                "group grid min-h-44 cursor-pointer place-items-center border border-dashed p-6 text-center transition",
                 isDragging ? "border-white bg-white/10" : "border-white/18 bg-white/[0.035] hover:bg-white/[0.06]",
               ].join(" ")}
               onDragEnter={() => setIsDragging(true)}
@@ -289,59 +311,9 @@ export default function Home() {
               </span>
             </label>
 
-            <div className="border border-white/10 bg-white/[0.035] p-4">
-              <div className="flex items-center justify-between gap-3">
-                <label htmlFor="monochrome" className="text-sm font-medium text-zinc-200">
-                  흑백 정도
-                </label>
-                <span className="font-mono text-sm text-zinc-300">{monochrome}</span>
-              </div>
-              <input
-                id="monochrome"
-                className="mt-4 h-2 w-full accent-white"
-                min="0"
-                max="100"
-                type="range"
-                value={monochrome}
-                onChange={(event) => setMonochrome(Number(event.target.value))}
-              />
-            </div>
-
-            <div className="border border-white/10 bg-white/[0.035] p-4">
-              <div className="flex items-center justify-between gap-3">
-                <label htmlFor="noise" className="text-sm font-medium text-zinc-200">
-                  노이즈 정도
-                </label>
-                <span className="font-mono text-sm text-zinc-300">{noise}</span>
-              </div>
-              <input
-                id="noise"
-                className="mt-4 h-2 w-full accent-white"
-                min="0"
-                max="100"
-                type="range"
-                value={noise}
-                onChange={(event) => setNoise(Number(event.target.value))}
-              />
-            </div>
-
-            <div className="border border-white/10 bg-white/[0.035] p-4">
-              <div className="flex items-center justify-between gap-3">
-                <label htmlFor="skullSize" className="text-sm font-medium text-zinc-200">
-                  해골 크기
-                </label>
-                <span className="font-mono text-sm text-zinc-300">{skullSize}</span>
-              </div>
-              <input
-                id="skullSize"
-                className="mt-4 h-2 w-full accent-white"
-                min="35"
-                max="100"
-                type="range"
-                value={skullSize}
-                onChange={(event) => setSkullSize(Number(event.target.value))}
-              />
-            </div>
+            <Control id="mono" label="흑백 정도" value={mono} min={0} max={100} onChange={setMono} />
+            <Control id="noise" label="노이즈 정도" value={noise} min={0} max={100} onChange={setNoise} />
+            <Control id="skull" label="해골 크기" value={skull} min={35} max={100} onChange={setSkull} />
 
             <div className="grid grid-cols-2 gap-3">
               <button
@@ -382,33 +354,71 @@ export default function Home() {
             <p className="mt-auto text-xs text-zinc-500">Developed by yeohj0710.</p>
           </aside>
 
-          <div className="grid min-h-[420px] place-items-center overflow-hidden border border-white/10 bg-black">
-            <div className="grid h-full w-full place-items-center p-3">
-              <div
-                className="relative max-h-full w-full max-w-[min(100%,78dvh)] overflow-hidden border border-white/10 bg-[#101012]"
-                style={{ aspectRatio: previewUrl ? previewAspect : 9 / 16 }}
-              >
-                {previewUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img className="size-full object-contain" src={previewUrl} alt="생성된 해골 밈" />
-                ) : (
-                  <div className="grid size-full place-items-center">
-                    <div className="grid size-24 place-items-center border border-white/12 text-zinc-500">
-                      <UploadCloud className="size-8" aria-hidden="true" />
-                    </div>
+          <div className="grid min-h-[420px] max-h-[calc(100dvh-7rem)] place-items-center overflow-hidden border border-white/10 bg-black p-3">
+            <div
+              className="relative max-h-full max-w-full overflow-hidden border border-white/10 bg-[#101012]"
+              style={{
+                aspectRatio: previewAspect,
+                width: previewAspect >= 1 ? "min(100%, 900px)" : `min(100%, ${Math.round(previewAspect * 720)}px)`,
+                height: previewAspect < 1 ? "min(100%, 720px)" : "auto",
+              }}
+            >
+              {previewUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img className="size-full object-contain" src={previewUrl} alt="생성된 해골 밈" />
+              ) : (
+                <div className="grid size-full place-items-center">
+                  <div className="grid size-24 place-items-center border border-white/12 text-zinc-500">
+                    <UploadCloud className="size-8" aria-hidden="true" />
                   </div>
-                )}
-                {status === "rendering" ? (
-                  <div className="absolute inset-0 grid place-items-center bg-black/72 text-sm font-semibold uppercase tracking-[0.18em] text-zinc-200">
-                    생성 중
-                  </div>
-                ) : null}
-              </div>
+                </div>
+              )}
+              {status === "rendering" ? (
+                <div className="absolute inset-0 grid place-items-center bg-black/72 text-sm font-semibold tracking-[0.18em] text-zinc-200">
+                  생성 중
+                </div>
+              ) : null}
             </div>
             <canvas ref={canvasRef} className="hidden" />
           </div>
         </div>
       </section>
     </main>
+  );
+}
+
+function Control({
+  id,
+  label,
+  value,
+  min,
+  max,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <div className="border border-white/10 bg-white/[0.035] p-4">
+      <div className="flex items-center justify-between gap-3">
+        <label htmlFor={id} className="text-sm font-medium text-zinc-200">
+          {label}
+        </label>
+        <span className="font-mono text-sm text-zinc-300">{value}</span>
+      </div>
+      <input
+        id={id}
+        className="mt-4 h-2 w-full accent-white"
+        min={min}
+        max={max}
+        type="range"
+        value={value}
+        onChange={(event) => onChange(Number(event.target.value))}
+      />
+    </div>
   );
 }
