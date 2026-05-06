@@ -434,8 +434,9 @@ export default function Home() {
   };
 
   const ready = status === "ready";
-  const previewWidth = previewAspect >= 1 ? "min(100%, 860px)" : `min(100%, ${Math.round(previewAspect * 620)}px)`;
-  const previewHeight = previewAspect < 1 ? "min(62dvh, 620px)" : "auto";
+  const previewMaxWidth = previewAspect >= 1 ? 860 : Math.round(previewAspect * 620);
+  const previewViewportCap = hasPreview ? "62dvh" : "52dvh";
+  const previewWidth = `min(100%, ${previewMaxWidth}px, calc(${previewViewportCap} * ${previewAspect}))`;
   const structuredData = {
     "@context": "https://schema.org",
     "@type": "WebApplication",
@@ -481,7 +482,7 @@ export default function Home() {
               "group relative grid cursor-pointer place-items-center overflow-hidden border border-dashed bg-white/[0.035] text-center transition",
               isDragging ? "border-white bg-white/10" : "border-white/18 hover:bg-white/[0.06]",
             ].join(" ")}
-            style={{ aspectRatio: previewAspect, width: previewWidth, height: previewHeight, maxWidth: "100%", alignSelf: "center" }}
+            style={{ aspectRatio: previewAspect, width: previewWidth, maxWidth: "100%", alignSelf: "center" }}
             onDragEnter={() => setIsDragging(true)}
             onDragLeave={() => setIsDragging(false)}
             onDragOver={(event) => event.preventDefault()}
@@ -497,7 +498,7 @@ export default function Home() {
             <canvas
               ref={canvasRef}
               aria-label={T.alt}
-              className={hasPreview ? "size-full object-contain" : "hidden"}
+              className={hasPreview ? "block h-full w-full object-contain" : "hidden"}
             />
             {!hasPreview ? (
               <span className="flex flex-col items-center gap-4 p-6">
