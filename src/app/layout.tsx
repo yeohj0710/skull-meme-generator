@@ -25,11 +25,20 @@ export const metadata: Metadata = {
     url: "/",
     siteName: "Skull Meme Generator",
     type: "website",
+    images: [
+      {
+        url: "/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "Skull Meme Generator thumbnail",
+      },
+    ],
   },
   twitter: {
-    card: "summary",
+    card: "summary_large_image",
     title: "Skull Meme Generator",
     description: "Create phonk-style skull meme images in your browser.",
+    images: ["/og-image.png"],
   },
   authors: [{ name: "yeohj0710" }],
   creator: "yeohj0710",
