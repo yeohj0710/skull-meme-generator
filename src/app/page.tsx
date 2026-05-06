@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, DragEvent, FormEvent, PointerEvent, TouchEvent, useCallback, useEffect, useRef, useState } from "react";
+import { ChangeEvent, DragEvent, KeyboardEvent, MouseEvent, TouchEvent, useCallback, useEffect, useRef, useState } from "react";
 import { Download, ImagePlus, LoaderCircle, RefreshCw, Skull, UploadCloud } from "lucide-react";
 
 type RenderStatus = "idle" | "rendering" | "ready" | "error";
@@ -616,7 +616,8 @@ function Control({
   onChange: (value: number) => void;
   onCommit: (value: number) => void;
 }) {
-  const inputRef = useRef<HTMLInputElement>(null);
+  const trackRef = useRef<HTMLDivElement>(null);
+  const activeRef = useRef(false);
   const latestValueRef = useRef(value);
   const percent = ((value - min) / (max - min)) * 100;
 
@@ -625,12 +626,12 @@ function Control({
   }, [value]);
 
   const valueFromClientX = (clientX: number) => {
-    const input = inputRef.current;
-    if (!input) {
+    const track = trackRef.current;
+    if (!track) {
       return latestValueRef.current;
     }
 
-    const rect = input.getBoundingClientRect();
+    const rect = track.getBoundingClientRect();
     const ratio = clamp((clientX - rect.left) / rect.width, 0, 1);
     return Math.round(min + ratio * (max - min));
   };
@@ -646,78 +647,128 @@ function Control({
     }
   };
 
-  const handleInput = (event: FormEvent<HTMLInputElement>) => {
-    onChange(Number(event.currentTarget.value));
+  const startDrag = (clientX: number) => {
+    activeRef.current = true;
+    updateFromClientX(clientX);
   };
 
-  const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
-    onCommit(Number(event.currentTarget.value));
+  const handleMouseDown = (event: MouseEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    startDrag(event.clientX);
   };
 
-  const handlePointerDown = (event: PointerEvent<HTMLInputElement>) => {
-    event.currentTarget.setPointerCapture(event.pointerId);
-    updateFromClientX(event.clientX);
+  const handleTouchStart = (event: TouchEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    startDrag(event.touches[0].clientX);
   };
 
-  const handlePointerMove = (event: PointerEvent<HTMLInputElement>) => {
-    if (!event.currentTarget.hasPointerCapture(event.pointerId)) {
+  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight" && event.key !== "Home" && event.key !== "End") {
       return;
     }
 
-    updateFromClientX(event.clientX);
-  };
-
-  const handlePointerUp = (event: PointerEvent<HTMLInputElement>) => {
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
+    event.preventDefault();
+    let nextValue = latestValueRef.current;
+    if (event.key === "ArrowLeft") {
+      nextValue = Math.max(min, nextValue - 1);
+    } else if (event.key === "ArrowRight") {
+      nextValue = Math.min(max, nextValue + 1);
+    } else if (event.key === "Home") {
+      nextValue = min;
+    } else {
+      nextValue = max;
     }
 
-    updateFromClientX(event.clientX, true);
+    latestValueRef.current = nextValue;
+    onCommit(nextValue);
   };
 
-  const handleTouchStart = (event: TouchEvent<HTMLInputElement>) => {
-    updateFromClientX(event.touches[0].clientX);
-  };
+  useEffect(() => {
+    const handleMouseMove = (event: globalThis.MouseEvent) => {
+      if (!activeRef.current) {
+        return;
+      }
 
-  const handleTouchMove = (event: TouchEvent<HTMLInputElement>) => {
-    updateFromClientX(event.touches[0].clientX);
-  };
+      event.preventDefault();
+      updateFromClientX(event.clientX);
+    };
 
-  const handleTouchEnd = () => {
-    onCommit(latestValueRef.current);
-  };
+    const handleMouseUp = (event: globalThis.MouseEvent) => {
+      if (!activeRef.current) {
+        return;
+      }
+
+      event.preventDefault();
+      activeRef.current = false;
+      updateFromClientX(event.clientX, true);
+    };
+
+    const handleTouchMove = (event: globalThis.TouchEvent) => {
+      if (!activeRef.current || !event.touches[0]) {
+        return;
+      }
+
+      event.preventDefault();
+      updateFromClientX(event.touches[0].clientX);
+    };
+
+    const handleTouchEnd = (event: globalThis.TouchEvent) => {
+      if (!activeRef.current) {
+        return;
+      }
+
+      event.preventDefault();
+      activeRef.current = false;
+      const touch = event.changedTouches[0];
+      if (touch) {
+        updateFromClientX(touch.clientX, true);
+      } else {
+        onCommit(latestValueRef.current);
+      }
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+    window.addEventListener("touchmove", handleTouchMove, { passive: false });
+    window.addEventListener("touchend", handleTouchEnd, { passive: false });
+    window.addEventListener("touchcancel", handleTouchEnd, { passive: false });
+
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+      window.removeEventListener("touchmove", handleTouchMove);
+      window.removeEventListener("touchend", handleTouchEnd);
+      window.removeEventListener("touchcancel", handleTouchEnd);
+    };
+  });
 
   return (
     <div className="border border-white/10 bg-white/[0.035] p-4">
       <div className="flex items-center justify-between gap-3">
-        <label htmlFor={id} className="text-sm font-medium text-zinc-200">
+        <span id={`${id}-label`} className="text-sm font-medium text-zinc-200">
           {label}
-        </label>
+        </span>
         <span className="font-mono text-sm text-zinc-300">{value}</span>
       </div>
-      <div className="relative mt-4 h-8">
+      <div
+        id={id}
+        ref={trackRef}
+        aria-labelledby={`${id}-label`}
+        aria-valuemax={max}
+        aria-valuemin={min}
+        aria-valuenow={value}
+        className="relative mt-4 h-11 touch-none select-none"
+        onKeyDown={handleKeyDown}
+        onMouseDown={handleMouseDown}
+        onTouchStart={handleTouchStart}
+        role="slider"
+        tabIndex={0}
+      >
         <div className="pointer-events-none absolute left-0 top-1/2 h-1 w-full -translate-y-1/2 bg-white/30" />
         <div className="pointer-events-none absolute left-0 top-1/2 h-1 -translate-y-1/2 bg-white" style={{ width: `${percent}%` }} />
-        <input
-          id={id}
-          ref={inputRef}
-          aria-valuemax={max}
-          aria-valuemin={min}
-          aria-valuenow={value}
-          className="control-range absolute inset-0 h-8 w-full cursor-pointer appearance-none bg-transparent"
-          max={max}
-          min={min}
-          onChange={handleChange}
-          onInput={handleInput}
-          onPointerCancel={handlePointerUp}
-          onPointerDown={handlePointerDown}
-          onPointerMove={handlePointerMove}
-          onPointerUp={handlePointerUp}
-          onTouchEnd={handleTouchEnd}
-          onTouchMove={handleTouchMove}
-          onTouchStart={handleTouchStart}
-          type="range"
-          value={value}
+        <div
+          className="pointer-events-none absolute top-1/2 size-6 -translate-x-1/2 -translate-y-1/2 bg-white shadow-[0_0_18px_rgba(255,255,255,0.35)]"
+          style={{ left: `${percent}%` }}
         />
       </div>
     </div>
