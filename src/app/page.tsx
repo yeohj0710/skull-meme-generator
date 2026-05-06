@@ -1,7 +1,7 @@
 "use client";
 
 import { ChangeEvent, DragEvent, KeyboardEvent, MouseEvent, TouchEvent, useCallback, useEffect, useRef, useState } from "react";
-import { Download, ImagePlus, LoaderCircle, RefreshCw, Skull, UploadCloud } from "lucide-react";
+import { Download, ImagePlus, LoaderCircle, RotateCcw, Skull, UploadCloud } from "lucide-react";
 
 type RenderStatus = "idle" | "rendering" | "ready" | "error";
 
@@ -16,6 +16,7 @@ const OUTPUT_HEIGHT = 1620;
 const OUTPUT_ASPECT = OUTPUT_WIDTH / OUTPUT_HEIGHT;
 const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/avif"];
 const SKULL_SRC = "/emoji-skull.webp";
+const DEFAULT_SETTINGS: EffectSettings = { mono: 48, noise: 62, skull: 42 };
 
 const T = {
   title: "Skull Meme Generator",
@@ -24,7 +25,7 @@ const T = {
   noise: "\uB178\uC774\uC988 \uC815\uB3C4",
   skull: "\uD574\uACE8 \uD06C\uAE30",
   pick: "\uC120\uD0DD",
-  remix: "\uB2E4\uC2DC \uC11E\uAE30",
+  reset: "\uAE30\uBCF8\uAC12\uC73C\uB85C \uB418\uB3CC\uB9AC\uAE30",
   download: "PNG \uB2E4\uC6B4\uB85C\uB4DC",
   processing: "\uC0DD\uC131 \uC911",
   error: "\uC774 \uC774\uBBF8\uC9C0\uB294 \uCC98\uB9AC\uD560 \uC218 \uC5C6\uC5B4\uC694.",
@@ -323,14 +324,14 @@ export default function Home() {
   const inputRef = useRef<HTMLInputElement>(null);
   const latestFileRef = useRef<File | null>(null);
   const skullImageRef = useRef<HTMLImageElement | null>(null);
-  const settingsRef = useRef<EffectSettings>({ mono: 48, noise: 62, skull: 42 });
+  const settingsRef = useRef<EffectSettings>(DEFAULT_SETTINGS);
   const renderIdRef = useRef(0);
   const renderTimerRef = useRef<number | null>(null);
   const [status, setStatus] = useState<RenderStatus>("idle");
   const [file, setFile] = useState<File | null>(null);
-  const [mono, setMono] = useState(48);
-  const [noise, setNoise] = useState(62);
-  const [skull, setSkull] = useState(42);
+  const [mono, setMono] = useState(DEFAULT_SETTINGS.mono);
+  const [noise, setNoise] = useState(DEFAULT_SETTINGS.noise);
+  const [skull, setSkull] = useState(DEFAULT_SETTINGS.skull);
   const [previewAspect, setPreviewAspect] = useState(OUTPUT_ASPECT);
   const [hasPreview, setHasPreview] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -416,6 +417,22 @@ export default function Home() {
     },
     [processFile],
   );
+
+  const resetSettings = useCallback(() => {
+    if (renderTimerRef.current) {
+      window.clearTimeout(renderTimerRef.current);
+    }
+
+    settingsRef.current = DEFAULT_SETTINGS;
+    setMono(DEFAULT_SETTINGS.mono);
+    setNoise(DEFAULT_SETTINGS.noise);
+    setSkull(DEFAULT_SETTINGS.skull);
+
+    const latestFile = latestFileRef.current;
+    if (latestFile) {
+      void processFile(latestFile, DEFAULT_SETTINGS);
+    }
+  }, [processFile]);
 
   const onFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const selectedFile = event.target.files?.[0];
@@ -542,7 +559,7 @@ export default function Home() {
             onCommit={(value) => updateSetting("skull", value, true)}
           />
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2">
             <button
               className="flex h-12 items-center justify-center gap-2 bg-white px-4 text-sm font-semibold text-black transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-40"
               type="button"
@@ -554,15 +571,15 @@ export default function Home() {
             <button
               className="flex h-12 items-center justify-center gap-2 border border-white/14 px-4 text-sm font-semibold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
               type="button"
-              disabled={!file || status === "rendering"}
-              onClick={() => file && void processFile(file)}
+              disabled={status === "rendering"}
+              onClick={resetSettings}
             >
               {status === "rendering" ? (
                 <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
               ) : (
-                <RefreshCw className="size-4" aria-hidden="true" />
+                <RotateCcw className="size-4" aria-hidden="true" />
               )}
-              {status === "rendering" ? T.processing : T.remix}
+              {status === "rendering" ? T.processing : T.reset}
             </button>
           </div>
 
