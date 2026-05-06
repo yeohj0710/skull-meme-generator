@@ -13,6 +13,7 @@ type EffectSettings = {
 
 const MAX_OUTPUT_SIDE = 1920;
 const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/avif"];
+const SKULL_SRC = "/emoji-skull.webp";
 
 const T = {
   title: "Skull Meme Generator",
@@ -27,28 +28,6 @@ const T = {
   error: "\uC774 \uC774\uBBF8\uC9C0\uB294 \uCC98\uB9AC\uD560 \uC218 \uC5C6\uC5B4\uC694.",
   alt: "\uC0DD\uC131\uB41C \uD574\uACE8 \uBC08",
 };
-
-const SKULL_SVG = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(`
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
-  <defs>
-    <filter id="s" x="-30%" y="-30%" width="160%" height="160%">
-      <feDropShadow dx="0" dy="6" stdDeviation="5" flood-color="#000" flood-opacity=".65"/>
-    </filter>
-    <linearGradient id="bone" x1="22" x2="102" y1="8" y2="118" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#fff"/>
-      <stop offset=".55" stop-color="#e9e9e6"/>
-      <stop offset="1" stop-color="#bdbab2"/>
-    </linearGradient>
-  </defs>
-  <g filter="url(#s)">
-    <path fill="url(#bone)" d="M64 9c-29 0-50 20-50 48 0 17 8 30 20 38v13c0 7 5 12 12 12h36c7 0 12-5 12-12V95c12-8 20-21 20-38 0-28-21-48-50-48Z"/>
-    <path fill="#111" d="M43 61c0 10-7 18-16 18-8 0-13-8-13-17s6-18 15-18c8 0 14 7 14 17Zm71 1c0 9-5 17-13 17-9 0-16-8-16-18 0-10 6-17 14-17 9 0 15 9 15 18ZM64 72c-6 9-11 19-9 25 2 5 16 5 18 0 2-6-3-16-9-25Z"/>
-    <path fill="#141414" d="M38 103h52v12H38z"/>
-    <path stroke="#eee" stroke-width="5" stroke-linecap="round" d="M48 102v16m11-17v18m11-18v18m11-17v16"/>
-    <path fill="#fff" opacity=".28" d="M34 23c15-11 39-13 57 0-18-5-39-4-57 0Z"/>
-  </g>
-</svg>
-`)}`;
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
@@ -74,10 +53,10 @@ function getOutputSize(image: ImageBitmap) {
 function drawBasePhoto(ctx: CanvasRenderingContext2D, image: ImageBitmap, width: number, height: number, mono: number) {
   ctx.save();
   ctx.filter = [
-    `grayscale(${mono})`,
-    `contrast(${1.03 + mono * 0.11})`,
-    `saturate(${1 - mono * 0.68})`,
-    `brightness(${0.74 - mono * 0.15})`,
+    `grayscale(${mono * 0.86})`,
+    `contrast(${0.94 + mono * 0.1})`,
+    `saturate(${0.92 - mono * 0.5})`,
+    `brightness(${0.86 - mono * 0.12})`,
   ].join(" ");
   ctx.drawImage(image, 0, 0, width, height);
   ctx.restore();
@@ -87,20 +66,20 @@ function drawVignette(ctx: CanvasRenderingContext2D, width: number, height: numb
   const radius = Math.max(width, height) * 0.72;
   const gradient = ctx.createRadialGradient(width / 2, height * 0.38, 0, width / 2, height / 2, radius);
   gradient.addColorStop(0, "rgba(0,0,0,0)");
-  gradient.addColorStop(0.55, `rgba(0,0,0,${0.2 + strength * 0.08})`);
-  gradient.addColorStop(1, `rgba(0,0,0,${0.62 + strength * 0.18})`);
+  gradient.addColorStop(0.55, `rgba(0,0,0,${0.14 + strength * 0.06})`);
+  gradient.addColorStop(1, `rgba(0,0,0,${0.48 + strength * 0.16})`);
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, width, height);
-  ctx.fillStyle = `rgba(0,0,0,${0.06 + strength * 0.1})`;
+  ctx.fillStyle = `rgba(0,0,0,${0.04 + strength * 0.08})`;
   ctx.fillRect(0, 0, width, height);
 }
 
 function drawNoise(ctx: CanvasRenderingContext2D, width: number, height: number, noise: number) {
-  const specks = Math.floor(width * height * (0.006 + noise * 0.025));
+  const specks = Math.floor(width * height * (0.003 + noise * 0.017));
 
   for (let i = 0; i < specks; i += 1) {
     const value = Math.random() > 0.52 ? 255 : 0;
-    const alpha = Math.random() * 0.09 + noise * 0.045;
+    const alpha = Math.random() * 0.055 + noise * 0.03;
     ctx.fillStyle = `rgba(${value},${value},${value},${alpha})`;
     ctx.fillRect(Math.random() * width, Math.random() * height, 1, 1);
   }
@@ -108,7 +87,7 @@ function drawNoise(ctx: CanvasRenderingContext2D, width: number, height: number,
 
 function drawScanlines(ctx: CanvasRenderingContext2D, width: number, height: number, noise: number) {
   ctx.save();
-  ctx.globalAlpha = 0.07 + noise * 0.08;
+  ctx.globalAlpha = 0.045 + noise * 0.055;
   ctx.fillStyle = "#050505";
   for (let y = 0; y < height; y += 4) {
     ctx.fillRect(0, y, width, 1);
@@ -117,9 +96,9 @@ function drawScanlines(ctx: CanvasRenderingContext2D, width: number, height: num
 }
 
 function drawShakeSlices(ctx: CanvasRenderingContext2D, width: number, height: number, noise: number) {
-  const slices = Math.floor(4 + noise * 10);
+  const slices = Math.floor(2 + noise * 7);
   ctx.save();
-  ctx.globalAlpha = 0.08 + noise * 0.1;
+  ctx.globalAlpha = 0.04 + noise * 0.08;
   for (let i = 0; i < slices; i += 1) {
     const sliceHeight = 3 + Math.random() * (height * 0.014);
     const y = Math.random() * height;
@@ -130,14 +109,14 @@ function drawShakeSlices(ctx: CanvasRenderingContext2D, width: number, height: n
 }
 
 function drawSkullAsset(ctx: CanvasRenderingContext2D, skullImage: HTMLImageElement, width: number, height: number, skull: number) {
-  const size = clamp(Math.min(width, height) * (0.075 + skull * 0.105), 46, 190);
-  const x = width / 2 - size / 2 + (Math.random() - 0.5) * size * 0.08;
-  const y = height * 0.8 - size / 2 + (Math.random() - 0.5) * size * 0.08;
+  const size = clamp(Math.min(width, height) * (0.07 + skull * 0.08), 42, 170);
+  const x = width / 2 - size / 2 + (Math.random() - 0.5) * size * 0.06;
+  const y = height * 0.815 - size / 2 + (Math.random() - 0.5) * size * 0.06;
 
   ctx.save();
   ctx.globalAlpha = 1;
   ctx.shadowColor = "rgba(0,0,0,0.9)";
-  ctx.shadowBlur = size * 0.2;
+  ctx.shadowBlur = size * 0.14;
   ctx.shadowOffsetY = size * 0.06;
   ctx.drawImage(skullImage, x, y, size, size);
   ctx.restore();
@@ -204,9 +183,9 @@ export default function Home() {
   const skullImageRef = useRef<HTMLImageElement | null>(null);
   const [status, setStatus] = useState<RenderStatus>("idle");
   const [file, setFile] = useState<File | null>(null);
-  const [mono, setMono] = useState(78);
-  const [noise, setNoise] = useState(58);
-  const [skull, setSkull] = useState(64);
+  const [mono, setMono] = useState(58);
+  const [noise, setNoise] = useState(42);
+  const [skull, setSkull] = useState(54);
   const [previewUrl, setPreviewUrl] = useState("");
   const [previewAspect, setPreviewAspect] = useState(4 / 5);
   const [isDragging, setIsDragging] = useState(false);
@@ -214,7 +193,7 @@ export default function Home() {
   const settings = useMemo(() => ({ mono, noise, skull }), [mono, noise, skull]);
 
   useEffect(() => {
-    void loadImage(SKULL_SVG).then((image) => {
+    void loadImage(SKULL_SRC).then((image) => {
       skullImageRef.current = image;
     });
   }, []);
@@ -231,7 +210,7 @@ export default function Home() {
   const processFile = useCallback(
     async (nextFile: File) => {
       const canvas = canvasRef.current;
-      const skullImage = skullImageRef.current ?? (await loadImage(SKULL_SVG));
+      const skullImage = skullImageRef.current ?? (await loadImage(SKULL_SRC));
       skullImageRef.current = skullImage;
 
       if (!canvas) {
