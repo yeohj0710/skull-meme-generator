@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Skull Meme Generator",
-  description: "Client-side phonk skull meme image generator.",
+  title: "해골 밈 생성기",
+  description: "브라우저에서 이미지를 해골 이모지 밈으로 만드는 생성기.",
 };
 
 export default function RootLayout({

@@ -181,7 +181,6 @@ export default function Home() {
   const [monochrome, setMonochrome] = useState(78);
   const [noise, setNoise] = useState(58);
   const [skullSize, setSkullSize] = useState(62);
-  const [autoSave, setAutoSave] = useState(true);
   const [previewUrl, setPreviewUrl] = useState("");
   const [previewAspect, setPreviewAspect] = useState(1);
   const [isDragging, setIsDragging] = useState(false);
@@ -196,7 +195,7 @@ export default function Home() {
   }, [file]);
 
   const processFile = useCallback(
-    async (nextFile: File, shouldAutoSave = autoSave) => {
+    async (nextFile: File) => {
       const canvas = canvasRef.current;
       if (!canvas) {
         return;
@@ -217,21 +216,17 @@ export default function Home() {
         setPreviewUrl(url);
         setPreviewAspect(canvas.width / canvas.height);
         setStatus("ready");
-
-        if (shouldAutoSave) {
-          window.setTimeout(() => triggerDownload(canvas, nextFile), 80);
-        }
       } catch {
         setStatus("error");
       }
     },
-    [autoSave, monochrome, noise, skullSize],
+    [monochrome, noise, skullSize],
   );
 
   useEffect(() => {
     const latestFile = latestFileRef.current;
     if (latestFile) {
-      void processFile(latestFile, false);
+      void processFile(latestFile);
     }
   }, [monochrome, noise, skullSize, processFile]);
 
@@ -261,20 +256,9 @@ export default function Home() {
             <div className="grid size-9 shrink-0 place-items-center border border-white/15 bg-white text-black">
               <Skull className="size-4" aria-hidden="true" />
             </div>
-            <h1 className="truncate text-base font-semibold tracking-normal sm:text-lg">Skull Meme Generator</h1>
+            <h1 className="truncate text-base font-semibold tracking-normal sm:text-lg">해골 밈 생성기</h1>
           </div>
-          <label className="flex h-9 shrink-0 items-center gap-2 text-sm text-zinc-300">
-            <span>Auto-save</span>
-            <input
-              className="sr-only"
-              checked={autoSave}
-              type="checkbox"
-              onChange={(event) => setAutoSave(event.target.checked)}
-            />
-            <span className={`relative h-6 w-11 border transition ${autoSave ? "border-white bg-white" : "border-white/20 bg-white/10"}`}>
-              <span className={`absolute top-1 size-4 bg-[#070708] transition ${autoSave ? "left-6" : "left-1 bg-white"}`} />
-            </span>
-          </label>
+          <span className="shrink-0 font-mono text-sm text-zinc-500">💀 PNG</span>
         </header>
 
         <div className="grid flex-1 items-stretch gap-4 py-4 lg:grid-cols-[minmax(280px,360px)_1fr]">
@@ -300,7 +284,7 @@ export default function Home() {
                 <span className="grid size-14 place-items-center bg-white text-black transition group-hover:scale-105">
                   <UploadCloud className="size-6" aria-hidden="true" />
                 </span>
-                <span className="text-lg font-semibold">Upload image</span>
+                <span className="text-lg font-semibold">이미지 업로드</span>
                 <span className="text-sm text-zinc-400">PNG, JPG, WebP, AVIF</span>
               </span>
             </label>
@@ -308,7 +292,7 @@ export default function Home() {
             <div className="border border-white/10 bg-white/[0.035] p-4">
               <div className="flex items-center justify-between gap-3">
                 <label htmlFor="monochrome" className="text-sm font-medium text-zinc-200">
-                  Monochrome
+                  흑백 정도
                 </label>
                 <span className="font-mono text-sm text-zinc-300">{monochrome}</span>
               </div>
@@ -326,7 +310,7 @@ export default function Home() {
             <div className="border border-white/10 bg-white/[0.035] p-4">
               <div className="flex items-center justify-between gap-3">
                 <label htmlFor="noise" className="text-sm font-medium text-zinc-200">
-                  Noise
+                  노이즈 정도
                 </label>
                 <span className="font-mono text-sm text-zinc-300">{noise}</span>
               </div>
@@ -344,7 +328,7 @@ export default function Home() {
             <div className="border border-white/10 bg-white/[0.035] p-4">
               <div className="flex items-center justify-between gap-3">
                 <label htmlFor="skullSize" className="text-sm font-medium text-zinc-200">
-                  Skull size
+                  해골 크기
                 </label>
                 <span className="font-mono text-sm text-zinc-300">{skullSize}</span>
               </div>
@@ -366,16 +350,16 @@ export default function Home() {
                 onClick={() => inputRef.current?.click()}
               >
                 <ImagePlus className="size-4" aria-hidden="true" />
-                Pick
+                선택
               </button>
               <button
                 className="flex h-12 items-center justify-center gap-2 border border-white/14 px-4 text-sm font-semibold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
                 type="button"
                 disabled={!file || status === "rendering"}
-                onClick={() => file && void processFile(file, false)}
+                onClick={() => file && void processFile(file)}
               >
                 <RefreshCw className="size-4" aria-hidden="true" />
-                Remix
+                다시 섞기
               </button>
             </div>
 
@@ -386,12 +370,12 @@ export default function Home() {
               onClick={download}
             >
               <Download className="size-4" aria-hidden="true" />
-              Download PNG
+              PNG 다운로드
             </button>
 
             {status === "error" ? (
               <p className="border border-white/30 bg-white/10 p-3 text-sm text-zinc-200">
-                This image could not be processed.
+                이 이미지는 처리할 수 없어요.
               </p>
             ) : null}
 
@@ -406,7 +390,7 @@ export default function Home() {
               >
                 {previewUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img className="size-full object-contain" src={previewUrl} alt="Generated skull meme" />
+                  <img className="size-full object-contain" src={previewUrl} alt="생성된 해골 밈" />
                 ) : (
                   <div className="grid size-full place-items-center">
                     <div className="grid size-24 place-items-center border border-white/12 text-zinc-500">
@@ -416,7 +400,7 @@ export default function Home() {
                 )}
                 {status === "rendering" ? (
                   <div className="absolute inset-0 grid place-items-center bg-black/72 text-sm font-semibold uppercase tracking-[0.18em] text-zinc-200">
-                    Rendering
+                    생성 중
                   </div>
                 ) : null}
               </div>
