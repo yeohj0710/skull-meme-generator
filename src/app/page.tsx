@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, DragEvent, MouseEvent, PointerEvent, TouchEvent, useCallback, useEffect, useRef, useState } from "react";
+import { ChangeEvent, DragEvent, FormEvent, PointerEvent, TouchEvent, useCallback, useEffect, useRef, useState } from "react";
 import { Download, ImagePlus, RefreshCw, Skull, UploadCloud } from "lucide-react";
 
 type RenderStatus = "idle" | "rendering" | "ready" | "error";
@@ -331,8 +331,8 @@ export default function Home() {
   const [mono, setMono] = useState(48);
   const [noise, setNoise] = useState(62);
   const [skull, setSkull] = useState(42);
-  const [previewUrl, setPreviewUrl] = useState("");
   const [previewAspect, setPreviewAspect] = useState(OUTPUT_ASPECT);
+  const [hasPreview, setHasPreview] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
 
   useEffect(() => {
@@ -376,8 +376,8 @@ export default function Home() {
         if (renderId !== renderIdRef.current) {
           return;
         }
-        setPreviewUrl(canvas.toDataURL("image/png", 0.95));
         setPreviewAspect(canvas.width / canvas.height);
+        setHasPreview(true);
         setStatus("ready");
       } catch {
         setStatus("error");
@@ -494,10 +494,12 @@ export default function Home() {
               accept={ACCEPTED_TYPES.join(",")}
               onChange={onFileChange}
             />
-            {previewUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img className="size-full object-contain" src={previewUrl} alt={T.alt} />
-            ) : (
+            <canvas
+              ref={canvasRef}
+              aria-label={T.alt}
+              className={hasPreview ? "size-full object-contain" : "hidden"}
+            />
+            {!hasPreview ? (
               <span className="flex flex-col items-center gap-4 p-6">
                 <span className="grid size-14 place-items-center bg-white text-black transition group-hover:scale-105">
                   <UploadCloud className="size-6" aria-hidden="true" />
@@ -505,7 +507,7 @@ export default function Home() {
                 <span className="text-lg font-semibold">{T.upload}</span>
                 <span className="text-sm text-zinc-400">PNG, JPG, WebP, AVIF</span>
               </span>
-            )}
+            ) : null}
             {status === "rendering" ? (
               <div className="absolute inset-0 grid place-items-center bg-black/72 text-sm font-semibold tracking-[0.18em] text-zinc-200">
                 {T.processing}
@@ -579,7 +581,6 @@ export default function Home() {
             Developed by yeohj0710
           </p>
         </div>
-        <canvas ref={canvasRef} className="hidden" />
       </section>
     </main>
   );
@@ -602,7 +603,7 @@ function Control({
   onChange: (value: number) => void;
   onCommit: (value: number) => void;
 }) {
-  const trackRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const latestValueRef = useRef(value);
   const percent = ((value - min) / (max - min)) * 100;
 
@@ -611,12 +612,12 @@ function Control({
   }, [value]);
 
   const valueFromClientX = (clientX: number) => {
-    const track = trackRef.current;
-    if (!track) {
+    const input = inputRef.current;
+    if (!input) {
       return latestValueRef.current;
     }
 
-    const rect = track.getBoundingClientRect();
+    const rect = input.getBoundingClientRect();
     const ratio = clamp((clientX - rect.left) / rect.width, 0, 1);
     return Math.round(min + ratio * (max - min));
   };
@@ -632,13 +633,20 @@ function Control({
     }
   };
 
-  const handlePointerDown = (event: PointerEvent<HTMLDivElement>) => {
-    event.preventDefault();
+  const handleInput = (event: FormEvent<HTMLInputElement>) => {
+    onChange(Number(event.currentTarget.value));
+  };
+
+  const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
+    onCommit(Number(event.currentTarget.value));
+  };
+
+  const handlePointerDown = (event: PointerEvent<HTMLInputElement>) => {
     event.currentTarget.setPointerCapture(event.pointerId);
     updateFromClientX(event.clientX);
   };
 
-  const handlePointerMove = (event: PointerEvent<HTMLDivElement>) => {
+  const handlePointerMove = (event: PointerEvent<HTMLInputElement>) => {
     if (!event.currentTarget.hasPointerCapture(event.pointerId)) {
       return;
     }
@@ -646,7 +654,7 @@ function Control({
     updateFromClientX(event.clientX);
   };
 
-  const handlePointerUp = (event: PointerEvent<HTMLDivElement>) => {
+  const handlePointerUp = (event: PointerEvent<HTMLInputElement>) => {
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
@@ -654,17 +662,11 @@ function Control({
     updateFromClientX(event.clientX, true);
   };
 
-  const handleClick = (event: MouseEvent<HTMLDivElement>) => {
-    updateFromClientX(event.clientX, true);
-  };
-
-  const handleTouchStart = (event: TouchEvent<HTMLDivElement>) => {
-    event.preventDefault();
+  const handleTouchStart = (event: TouchEvent<HTMLInputElement>) => {
     updateFromClientX(event.touches[0].clientX);
   };
 
-  const handleTouchMove = (event: TouchEvent<HTMLDivElement>) => {
-    event.preventDefault();
+  const handleTouchMove = (event: TouchEvent<HTMLInputElement>) => {
     updateFromClientX(event.touches[0].clientX);
   };
 
@@ -675,35 +677,34 @@ function Control({
   return (
     <div className="border border-white/10 bg-white/[0.035] p-4">
       <div className="flex items-center justify-between gap-3">
-        <span id={`${id}-label`} className="text-sm font-medium text-zinc-200">
+        <label htmlFor={id} className="text-sm font-medium text-zinc-200">
           {label}
-        </span>
+        </label>
         <span className="font-mono text-sm text-zinc-300">{value}</span>
       </div>
-      <div
-        id={id}
-        ref={trackRef}
-        aria-labelledby={`${id}-label`}
-        aria-valuemax={max}
-        aria-valuemin={min}
-        aria-valuenow={value}
-        className="relative mt-4 h-8 touch-none select-none"
-        onClick={handleClick}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={handlePointerUp}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-        role="slider"
-        tabIndex={0}
-      >
-        <span className="pointer-events-none absolute left-0 top-1/2 h-1 w-full -translate-y-1/2 bg-white/30" />
-        <span className="pointer-events-none absolute left-0 top-1/2 h-1 -translate-y-1/2 bg-white" style={{ width: `${percent}%` }} />
-        <span
-          className="pointer-events-none absolute top-1/2 size-4 -translate-x-1/2 -translate-y-1/2 bg-white shadow-[0_0_18px_rgba(255,255,255,0.25)]"
-          style={{ left: `${percent}%` }}
+      <div className="relative mt-4 h-8">
+        <div className="pointer-events-none absolute left-0 top-1/2 h-1 w-full -translate-y-1/2 bg-white/30" />
+        <div className="pointer-events-none absolute left-0 top-1/2 h-1 -translate-y-1/2 bg-white" style={{ width: `${percent}%` }} />
+        <input
+          id={id}
+          ref={inputRef}
+          aria-valuemax={max}
+          aria-valuemin={min}
+          aria-valuenow={value}
+          className="control-range absolute inset-0 h-8 w-full cursor-pointer appearance-none bg-transparent"
+          max={max}
+          min={min}
+          onChange={handleChange}
+          onInput={handleInput}
+          onPointerCancel={handlePointerUp}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onTouchEnd={handleTouchEnd}
+          onTouchMove={handleTouchMove}
+          onTouchStart={handleTouchStart}
+          type="range"
+          value={value}
         />
       </div>
     </div>
