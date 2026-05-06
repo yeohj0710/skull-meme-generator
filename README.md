@@ -1,4 +1,4 @@
-# 해골 밈 생성기
+# Skull Meme Generator
 
 업로드한 이미지를 해골 이모지 밈 PNG로 만들어주는 작은 Next.js 앱입니다.
 

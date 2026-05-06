@@ -15,7 +15,7 @@ const MAX_OUTPUT_SIDE = 1920;
 const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/avif"];
 
 const T = {
-  title: "\uD574\uACE8 \uBC08 \uC0DD\uC131\uAE30",
+  title: "Skull Meme Generator",
   upload: "\uC774\uBBF8\uC9C0 \uC5C5\uB85C\uB4DC",
   mono: "\uD751\uBC31 \uC815\uB3C4",
   noise: "\uB178\uC774\uC988 \uC815\uB3C4",
