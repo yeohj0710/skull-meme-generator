@@ -259,12 +259,10 @@ function drawSkullAsset(ctx: CanvasRenderingContext2D, skullImage: HTMLImageElem
   ctx.restore();
 }
 
-async function renderSkullMeme(file: File, canvas: HTMLCanvasElement, skullImage: HTMLImageElement, settings: EffectSettings) {
-  const bitmap = await createImageBitmap(file);
+async function renderSkullMeme(sourceImage: ImageBitmap, canvas: HTMLCanvasElement, skullImage: HTMLImageElement, settings: EffectSettings) {
   const ctx = canvas.getContext("2d", { alpha: false });
 
   if (!ctx) {
-    bitmap.close();
     throw new Error("Canvas is not available.");
   }
 
@@ -281,7 +279,7 @@ async function renderSkullMeme(file: File, canvas: HTMLCanvasElement, skullImage
   ctx.fillStyle = "#050505";
   ctx.fillRect(0, 0, width, height);
 
-  drawBasePhoto(ctx, bitmap, width, height, mono);
+  drawBasePhoto(ctx, sourceImage, width, height, mono);
   drawChromaticShock(ctx, width, height, noise);
   drawShakeSlices(ctx, width, height, noise);
   drawVignette(ctx, width, height, atmosphere);
@@ -292,8 +290,6 @@ async function renderSkullMeme(file: File, canvas: HTMLCanvasElement, skullImage
   drawPhonkStreaks(ctx, width, height, noise);
   drawNoise(ctx, width, height, noise);
   drawSkullAsset(ctx, skullImage, width, height, skull);
-
-  bitmap.close();
 }
 
 function fileNameFromUpload(fileName: string) {
@@ -323,6 +319,7 @@ export default function Home() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const latestFileRef = useRef<File | null>(null);
+  const sourceImageRef = useRef<ImageBitmap | null>(null);
   const skullImageRef = useRef<HTMLImageElement | null>(null);
   const settingsRef = useRef<EffectSettings>(DEFAULT_SETTINGS);
   const renderIdRef = useRef(0);
@@ -340,6 +337,10 @@ export default function Home() {
     void loadImage(SKULL_SRC).then((image) => {
       skullImageRef.current = image;
     });
+
+    return () => {
+      sourceImageRef.current?.close();
+    };
   }, []);
 
   const download = useCallback(() => {
@@ -351,29 +352,23 @@ export default function Home() {
     triggerDownload(canvas, file);
   }, [file]);
 
-  const processFile = useCallback(
-    async (nextFile: File, nextSettings = settingsRef.current) => {
+  const renderCurrentImage = useCallback(
+    async (nextSettings = settingsRef.current) => {
       const canvas = canvasRef.current;
+      const sourceImage = sourceImageRef.current;
       const skullImage = skullImageRef.current ?? (await loadImage(SKULL_SRC));
       skullImageRef.current = skullImage;
       const renderId = renderIdRef.current + 1;
       renderIdRef.current = renderId;
 
-      if (!canvas) {
+      if (!canvas || !sourceImage) {
         return;
       }
 
-      if (!ACCEPTED_TYPES.includes(nextFile.type)) {
-        setStatus("error");
-        return;
-      }
-
-      setFile(nextFile);
-      latestFileRef.current = nextFile;
       setStatus("rendering");
 
       try {
-        await renderSkullMeme(nextFile, canvas, skullImage, nextSettings);
+        await renderSkullMeme(sourceImage, canvas, skullImage, nextSettings);
         if (renderId !== renderIdRef.current) {
           return;
         }
@@ -385,6 +380,35 @@ export default function Home() {
       }
     },
     [],
+  );
+
+  const processFile = useCallback(
+    async (nextFile: File, nextSettings = settingsRef.current) => {
+      if (!ACCEPTED_TYPES.includes(nextFile.type)) {
+        setStatus("error");
+        return;
+      }
+
+      const loadId = renderIdRef.current + 1;
+      renderIdRef.current = loadId;
+      setFile(nextFile);
+      latestFileRef.current = nextFile;
+      setStatus("rendering");
+
+      try {
+        const nextSourceImage = await createImageBitmap(nextFile);
+        if (loadId !== renderIdRef.current) {
+          nextSourceImage.close();
+          return;
+        }
+        sourceImageRef.current?.close();
+        sourceImageRef.current = nextSourceImage;
+        await renderCurrentImage(nextSettings);
+      } catch {
+        setStatus("error");
+      }
+    },
+    [renderCurrentImage],
   );
 
   const updateSetting = useCallback(
@@ -400,22 +424,21 @@ export default function Home() {
         setSkull(value);
       }
 
-      const latestFile = latestFileRef.current;
-      if (latestFile) {
+      if (sourceImageRef.current) {
         if (renderTimerRef.current) {
           window.clearTimeout(renderTimerRef.current);
         }
 
         if (commit) {
-          void processFile(latestFile, nextSettings);
+          void renderCurrentImage(nextSettings);
         } else {
           renderTimerRef.current = window.setTimeout(() => {
-            void processFile(latestFileRef.current ?? latestFile, settingsRef.current);
+            void renderCurrentImage(settingsRef.current);
           }, 350);
         }
       }
     },
-    [processFile],
+    [renderCurrentImage],
   );
 
   const resetSettings = useCallback(() => {
@@ -428,11 +451,10 @@ export default function Home() {
     setNoise(DEFAULT_SETTINGS.noise);
     setSkull(DEFAULT_SETTINGS.skull);
 
-    const latestFile = latestFileRef.current;
-    if (latestFile) {
-      void processFile(latestFile, DEFAULT_SETTINGS);
+    if (sourceImageRef.current) {
+      void renderCurrentImage(DEFAULT_SETTINGS);
     }
-  }, [processFile]);
+  }, [renderCurrentImage]);
 
   const onFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const selectedFile = event.target.files?.[0];
