@@ -9,6 +9,7 @@ type EffectSettings = {
   mono: number;
   noise: number;
   skull: number;
+  skullY: number;
 };
 
 const OUTPUT_WIDTH = 1080;
@@ -16,7 +17,7 @@ const OUTPUT_HEIGHT = 1620;
 const OUTPUT_ASPECT = OUTPUT_WIDTH / OUTPUT_HEIGHT;
 const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/avif"];
 const SKULL_SRC = "/emoji-skull.webp";
-const DEFAULT_SETTINGS: EffectSettings = { mono: 48, noise: 62, skull: 42 };
+const DEFAULT_SETTINGS: EffectSettings = { mono: 48, noise: 62, skull: 42, skullY: 78 };
 
 const T = {
   title: "Skull Meme Generator",
@@ -24,6 +25,7 @@ const T = {
   mono: "\uD751\uBC31 \uC815\uB3C4",
   noise: "\uB178\uC774\uC988 \uC815\uB3C4",
   skull: "\uD574\uACE8 \uD06C\uAE30",
+  skullY: "\uD574\uACE8 \uC0C1\uD558 \uC704\uCE58",
   pick: "\uC120\uD0DD",
   reset: "\uAE30\uBCF8\uAC12\uC73C\uB85C \uB418\uB3CC\uB9AC\uAE30",
   download: "PNG \uB2E4\uC6B4\uB85C\uB4DC",
@@ -245,10 +247,18 @@ function drawChromaticShock(ctx: CanvasRenderingContext2D, width: number, height
   ctx.restore();
 }
 
-function drawSkullAsset(ctx: CanvasRenderingContext2D, skullImage: HTMLImageElement, width: number, height: number, skull: number) {
+function drawSkullAsset(
+  ctx: CanvasRenderingContext2D,
+  skullImage: HTMLImageElement,
+  width: number,
+  height: number,
+  skull: number,
+  skullY: number,
+) {
   const size = clamp(width * (0.12 + skull * 0.3), width * 0.12, width * 0.42);
   const x = width / 2 - size / 2 + (Math.random() - 0.5) * size * 0.05;
-  const y = height * 0.78 - size / 2 + (Math.random() - 0.5) * size * 0.05;
+  const centerY = clamp(height * skullY, size * 0.55, height - size * 0.55);
+  const y = centerY - size / 2 + (Math.random() - 0.5) * size * 0.05;
 
   ctx.save();
   ctx.globalAlpha = 1;
@@ -271,6 +281,7 @@ async function renderSkullMeme(sourceImage: ImageBitmap, canvas: HTMLCanvasEleme
   const mono = clamp(settings.mono / 100, 0, 1);
   const noise = clamp(settings.noise / 100, 0, 1);
   const skull = clamp(settings.skull / 100, 0, 1);
+  const skullY = clamp(settings.skullY / 100, 0.45, 0.92);
   const atmosphere = clamp((mono + noise) / 2, 0.05, 1);
 
   canvas.width = width;
@@ -289,7 +300,7 @@ async function renderSkullMeme(sourceImage: ImageBitmap, canvas: HTMLCanvasEleme
   drawFilmScratches(ctx, width, height, noise);
   drawPhonkStreaks(ctx, width, height, noise);
   drawNoise(ctx, width, height, noise);
-  drawSkullAsset(ctx, skullImage, width, height, skull);
+  drawSkullAsset(ctx, skullImage, width, height, skull, skullY);
 }
 
 function fileNameFromUpload(fileName: string) {
@@ -329,6 +340,7 @@ export default function Home() {
   const [mono, setMono] = useState(DEFAULT_SETTINGS.mono);
   const [noise, setNoise] = useState(DEFAULT_SETTINGS.noise);
   const [skull, setSkull] = useState(DEFAULT_SETTINGS.skull);
+  const [skullY, setSkullY] = useState(DEFAULT_SETTINGS.skullY);
   const [previewAspect, setPreviewAspect] = useState(OUTPUT_ASPECT);
   const [hasPreview, setHasPreview] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -416,12 +428,19 @@ export default function Home() {
       const nextSettings = { ...settingsRef.current, [key]: value };
       settingsRef.current = nextSettings;
 
-      if (key === "mono") {
-        setMono(value);
-      } else if (key === "noise") {
-        setNoise(value);
-      } else {
-        setSkull(value);
+      switch (key) {
+        case "mono":
+          setMono(value);
+          break;
+        case "noise":
+          setNoise(value);
+          break;
+        case "skull":
+          setSkull(value);
+          break;
+        case "skullY":
+          setSkullY(value);
+          break;
       }
 
       if (sourceImageRef.current) {
@@ -450,6 +469,7 @@ export default function Home() {
     setMono(DEFAULT_SETTINGS.mono);
     setNoise(DEFAULT_SETTINGS.noise);
     setSkull(DEFAULT_SETTINGS.skull);
+    setSkullY(DEFAULT_SETTINGS.skullY);
 
     if (sourceImageRef.current) {
       void renderCurrentImage(DEFAULT_SETTINGS);
@@ -579,6 +599,15 @@ export default function Home() {
             max={100}
             onChange={(value) => updateSetting("skull", value)}
             onCommit={(value) => updateSetting("skull", value, true)}
+          />
+          <Control
+            id="skullY"
+            label={T.skullY}
+            value={skullY}
+            min={45}
+            max={92}
+            onChange={(value) => updateSetting("skullY", value)}
+            onCommit={(value) => updateSetting("skullY", value, true)}
           />
 
           <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2">
