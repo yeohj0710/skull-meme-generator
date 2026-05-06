@@ -14,6 +14,20 @@ type EffectSettings = {
 const MAX_OUTPUT_SIDE = 1920;
 const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/avif"];
 
+const T = {
+  title: "\uD574\uACE8 \uBC08 \uC0DD\uC131\uAE30",
+  upload: "\uC774\uBBF8\uC9C0 \uC5C5\uB85C\uB4DC",
+  mono: "\uD751\uBC31 \uC815\uB3C4",
+  noise: "\uB178\uC774\uC988 \uC815\uB3C4",
+  skull: "\uD574\uACE8 \uD06C\uAE30",
+  pick: "\uC120\uD0DD",
+  remix: "\uB2E4\uC2DC \uC11E\uAE30",
+  download: "PNG \uB2E4\uC6B4\uB85C\uB4DC",
+  processing: "\uC0DD\uC131 \uC911",
+  error: "\uC774 \uC774\uBBF8\uC9C0\uB294 \uCC98\uB9AC\uD560 \uC218 \uC5C6\uC5B4\uC694.",
+  alt: "\uC0DD\uC131\uB41C \uD574\uACE8 \uBC08",
+};
+
 const SKULL_SVG = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(`
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
   <defs>
@@ -194,7 +208,7 @@ export default function Home() {
   const [noise, setNoise] = useState(58);
   const [skull, setSkull] = useState(64);
   const [previewUrl, setPreviewUrl] = useState("");
-  const [previewAspect, setPreviewAspect] = useState(9 / 16);
+  const [previewAspect, setPreviewAspect] = useState(4 / 5);
   const [isDragging, setIsDragging] = useState(false);
 
   const settings = useMemo(() => ({ mono, noise, skull }), [mono, noise, skull]);
@@ -269,119 +283,101 @@ export default function Home() {
   };
 
   const ready = status === "ready";
+  const previewWidth = previewAspect >= 1 ? "min(100%, 860px)" : `min(100%, ${Math.round(previewAspect * 620)}px)`;
+  const previewHeight = previewAspect < 1 ? "min(62dvh, 620px)" : "auto";
 
   return (
     <main className="min-h-dvh overflow-x-hidden bg-[#070708] text-zinc-50">
-      <section className="mx-auto flex min-h-dvh w-full max-w-6xl flex-col px-4 py-4 sm:px-6 lg:px-8">
+      <section className="mx-auto flex min-h-dvh w-full max-w-3xl flex-col px-4 py-4 sm:px-6 lg:px-8">
         <header className="flex h-14 shrink-0 items-center justify-between border-b border-white/10">
           <div className="flex min-w-0 items-center gap-3">
             <div className="grid size-9 shrink-0 place-items-center border border-white/15 bg-white text-black">
               <Skull className="size-4" aria-hidden="true" />
             </div>
-            <h1 className="truncate text-base font-semibold tracking-normal sm:text-lg">해골 밈 생성기</h1>
+            <h1 className="truncate text-base font-semibold tracking-normal sm:text-lg">{T.title}</h1>
           </div>
           <span className="shrink-0 font-mono text-sm text-zinc-500">PNG</span>
         </header>
 
-        <div className="grid flex-1 items-start gap-4 py-4 lg:grid-cols-[minmax(280px,360px)_1fr]">
-          <aside className="flex flex-col gap-4">
-            <label
-              className={[
-                "group grid min-h-44 cursor-pointer place-items-center border border-dashed p-6 text-center transition",
-                isDragging ? "border-white bg-white/10" : "border-white/18 bg-white/[0.035] hover:bg-white/[0.06]",
-              ].join(" ")}
-              onDragEnter={() => setIsDragging(true)}
-              onDragLeave={() => setIsDragging(false)}
-              onDragOver={(event) => event.preventDefault()}
-              onDrop={onDrop}
-            >
-              <input
-                ref={inputRef}
-                className="sr-only"
-                type="file"
-                accept={ACCEPTED_TYPES.join(",")}
-                onChange={onFileChange}
-              />
-              <span className="flex flex-col items-center gap-4">
+        <div className="flex flex-1 flex-col gap-4 py-4">
+          <label
+            className={[
+              "group relative grid cursor-pointer place-items-center overflow-hidden border border-dashed bg-white/[0.035] text-center transition",
+              isDragging ? "border-white bg-white/10" : "border-white/18 hover:bg-white/[0.06]",
+            ].join(" ")}
+            style={{ aspectRatio: previewAspect, width: previewWidth, height: previewHeight, maxWidth: "100%", alignSelf: "center" }}
+            onDragEnter={() => setIsDragging(true)}
+            onDragLeave={() => setIsDragging(false)}
+            onDragOver={(event) => event.preventDefault()}
+            onDrop={onDrop}
+          >
+            <input
+              ref={inputRef}
+              className="sr-only"
+              type="file"
+              accept={ACCEPTED_TYPES.join(",")}
+              onChange={onFileChange}
+            />
+            {previewUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img className="size-full object-contain" src={previewUrl} alt={T.alt} />
+            ) : (
+              <span className="flex flex-col items-center gap-4 p-6">
                 <span className="grid size-14 place-items-center bg-white text-black transition group-hover:scale-105">
                   <UploadCloud className="size-6" aria-hidden="true" />
                 </span>
-                <span className="text-lg font-semibold">이미지 업로드</span>
+                <span className="text-lg font-semibold">{T.upload}</span>
                 <span className="text-sm text-zinc-400">PNG, JPG, WebP, AVIF</span>
               </span>
-            </label>
-
-            <Control id="mono" label="흑백 정도" value={mono} min={0} max={100} onChange={setMono} />
-            <Control id="noise" label="노이즈 정도" value={noise} min={0} max={100} onChange={setNoise} />
-            <Control id="skull" label="해골 크기" value={skull} min={35} max={100} onChange={setSkull} />
-
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                className="flex h-12 items-center justify-center gap-2 bg-white px-4 text-sm font-semibold text-black transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-40"
-                type="button"
-                onClick={() => inputRef.current?.click()}
-              >
-                <ImagePlus className="size-4" aria-hidden="true" />
-                선택
-              </button>
-              <button
-                className="flex h-12 items-center justify-center gap-2 border border-white/14 px-4 text-sm font-semibold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
-                type="button"
-                disabled={!file || status === "rendering"}
-                onClick={() => file && void processFile(file)}
-              >
-                <RefreshCw className="size-4" aria-hidden="true" />
-                다시 섞기
-              </button>
-            </div>
-
-            <button
-              className="flex h-13 items-center justify-center gap-2 bg-white px-5 text-sm font-bold text-black transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-40"
-              type="button"
-              disabled={!ready}
-              onClick={download}
-            >
-              <Download className="size-4" aria-hidden="true" />
-              PNG 다운로드
-            </button>
-
-            {status === "error" ? (
-              <p className="border border-white/30 bg-white/10 p-3 text-sm text-zinc-200">
-                이 이미지는 처리할 수 없어요.
-              </p>
+            )}
+            {status === "rendering" ? (
+              <div className="absolute inset-0 grid place-items-center bg-black/72 text-sm font-semibold tracking-[0.18em] text-zinc-200">
+                {T.processing}
+              </div>
             ) : null}
+          </label>
 
-            <p className="mt-auto text-xs text-zinc-500">Developed by yeohj0710.</p>
-          </aside>
+          <Control id="mono" label={T.mono} value={mono} min={0} max={100} onChange={setMono} />
+          <Control id="noise" label={T.noise} value={noise} min={0} max={100} onChange={setNoise} />
+          <Control id="skull" label={T.skull} value={skull} min={35} max={100} onChange={setSkull} />
 
-          <div className="grid min-h-[420px] max-h-[calc(100dvh-7rem)] place-items-center overflow-hidden border border-white/10 bg-black p-3">
-            <div
-              className="relative max-h-full max-w-full overflow-hidden border border-white/10 bg-[#101012]"
-              style={{
-                aspectRatio: previewAspect,
-                width: previewAspect >= 1 ? "min(100%, 900px)" : `min(100%, ${Math.round(previewAspect * 720)}px)`,
-                height: previewAspect < 1 ? "min(100%, 720px)" : "auto",
-              }}
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              className="flex h-12 items-center justify-center gap-2 bg-white px-4 text-sm font-semibold text-black transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-40"
+              type="button"
+              onClick={() => inputRef.current?.click()}
             >
-              {previewUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img className="size-full object-contain" src={previewUrl} alt="생성된 해골 밈" />
-              ) : (
-                <div className="grid size-full place-items-center">
-                  <div className="grid size-24 place-items-center border border-white/12 text-zinc-500">
-                    <UploadCloud className="size-8" aria-hidden="true" />
-                  </div>
-                </div>
-              )}
-              {status === "rendering" ? (
-                <div className="absolute inset-0 grid place-items-center bg-black/72 text-sm font-semibold tracking-[0.18em] text-zinc-200">
-                  생성 중
-                </div>
-              ) : null}
-            </div>
-            <canvas ref={canvasRef} className="hidden" />
+              <ImagePlus className="size-4" aria-hidden="true" />
+              {T.pick}
+            </button>
+            <button
+              className="flex h-12 items-center justify-center gap-2 border border-white/14 px-4 text-sm font-semibold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+              type="button"
+              disabled={!file || status === "rendering"}
+              onClick={() => file && void processFile(file)}
+            >
+              <RefreshCw className="size-4" aria-hidden="true" />
+              {T.remix}
+            </button>
           </div>
+
+          <button
+            className="flex h-13 items-center justify-center gap-2 bg-white px-5 text-sm font-bold text-black transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-40"
+            type="button"
+            disabled={!ready}
+            onClick={download}
+          >
+            <Download className="size-4" aria-hidden="true" />
+            {T.download}
+          </button>
+
+          {status === "error" ? (
+            <p className="border border-white/30 bg-white/10 p-3 text-sm text-zinc-200">{T.error}</p>
+          ) : null}
+
+          <p className="pb-2 text-xs text-zinc-500">Developed by yeohj0710.</p>
         </div>
+        <canvas ref={canvasRef} className="hidden" />
       </section>
     </main>
   );
